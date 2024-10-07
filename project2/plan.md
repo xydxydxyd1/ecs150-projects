@@ -1,5 +1,7 @@
 # Specifications
 
+## Argument Processing
+
 ## I/O
 * Interactive mode repeatedly prompts user for input
 * Batch mode takes in files with each line as input

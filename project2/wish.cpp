@@ -12,7 +12,7 @@ void interactive() {
     string input;
     while (is_running) {
         cout << PROMPT;
-        cin >> input;
+        getline(cin, input);
         cout << input << endl;
     }
 }

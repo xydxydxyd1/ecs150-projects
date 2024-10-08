@@ -1,9 +1,10 @@
 // `wish`, the Wisconsin Shell
+#include <functional>
 #include <iostream>
 #include <string>
-#include <vector>
+#include <sstream>
 #include <unordered_map>
-#include <functional>
+#include <vector>
 using namespace std;
 
 const string PROMPT = "wish> ";
@@ -23,15 +24,19 @@ void interactive() {
 void batch(char** filenames, int num_files) {
 }
 
+
 // Commands
 
-void builtin_ls(string) {
-}
+typedef function<void(string, const ostream&)> command;
 
-typedef function<void(string)> command;
+void builtin_exit(string, const ostream&);
+void builtin_cd(string, const ostream&);
+void builtin_path(string, const ostream&);
 
 unordered_map<string, command> builtin_cmds{
-    {"ls", builtin_ls},
+    {"exit", builtin_exit},
+    {"cd", builtin_cd},
+    {"path", builtin_path},
 };
 
 /// Run `cmds`

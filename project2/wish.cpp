@@ -1,19 +1,28 @@
 // `wish`, the Wisconsin Shell
+#include <cstring>
 #include <functional>
 #include <iostream>
-#include <string>
-#include <cstring>
 #include <sstream>
+#include <string>
+#include <unistd.h>
 #include <unordered_map>
 #include <vector>
-#include <unistd.h>
 #include <wait.h>
 using namespace std;
 
 const string PROMPT = "wish> ";
 const string ERR_MSG = "An error has occurred";
 
+void interactive();
+void batch(char** filenames, int num_files);
+
 void run(const string cmd, const ostream& output);
+string get_firstword(const string& cmd);
+string get_executable(const string& name);
+
+void builtin_exit(string, const ostream&);
+void builtin_cd(string, const ostream&);
+void builtin_path(string, const ostream&);
 
 /// Main program in interactive mode
 void interactive() {
@@ -83,12 +92,12 @@ void run(const string cmd, const ostream& output) {
     if (name.size() == 0)
         return;
 
+    // Built-in command
     try {
-        // Built-in command
         command builtin_cmd = builtin_cmds.at(name);
         builtin_cmd(cmd, output);
         return;
-    } catch(out_of_range err) {}
+    } catch(const out_of_range& err) {}
 
     // Everything else
 

@@ -20,9 +20,9 @@ void run(const string cmd, const ostream& output);
 string get_firstword(const string& cmd);
 string get_executable(const string& name);
 
-void builtin_exit(string, const ostream&);
-void builtin_cd(string, const ostream&);
-void builtin_path(string, const ostream&);
+void builtin_exit(vector<string>);
+void builtin_cd(vector<string>);
+void builtin_path(vector<string>);
 
 /// Main program in interactive mode
 void interactive() {
@@ -44,13 +44,27 @@ void batch(char** filenames, int num_files) {
 
 vector<string> paths{"/bin"};
 
-typedef function<void(string, const ostream&)> command;
+/// Type for a builtin command. Takes in a vector of arguments for the command,
+/// with the first argument being the name of the command (by convention)
+///
+/// If command failed to execute, throws `std::invalid_argument` with the
+/// correct usage.
 
-void builtin_exit(string, const ostream&) {}
-void builtin_cd(string, const ostream&) {}
-void builtin_path(string, const ostream&) {}
+typedef function<void(vector<string>)> Command;
 
-unordered_map<string, command> builtin_cmds{
+void builtin_exit(vector<string> args) {
+    exit(0);
+}
+void builtin_cd(vector<string> args) {
+    if (args.size() != 2)
+        throw invalid_argument("cd directory");
+    chdir(args[1].c_str());
+}
+void builtin_path(vector<string> args) {
+    paths = vector<string>(args.begin() + 1, args.end());
+}
+
+unordered_map<string, Command> builtin_cmds{
     {"exit", builtin_exit},
     {"cd", builtin_cd},
     {"path", builtin_path},
@@ -84,18 +98,24 @@ string get_executable(const string& name) {
 
 /// Run a `cmd`
 void run(const string cmd, const ostream& output) {
+    // Preprocessing
     istringstream cmd_stream(cmd);
     string name;
     cmd_stream >> name;
-
-    // Empty line
     if (name.size() == 0)
         return;
+    vector<string> args;
+    args.push_back(name);
+    while (!cmd_stream.eof()) {
+        string arg;
+        cmd_stream >> arg;
+        args.push_back(arg);
+    }
 
     // Built-in command
     try {
-        command builtin_cmd = builtin_cmds.at(name);
-        builtin_cmd(cmd, output);
+        Command builtin_cmd = builtin_cmds.at(name);
+        builtin_cmd(args);
         return;
     } catch(const out_of_range& err) {}
 
@@ -107,13 +127,6 @@ void run(const string cmd, const ostream& output) {
         return;
     }
 
-    vector<string> args;
-    args.push_back(name);
-    while (!cmd_stream.eof()) {
-        string arg;
-        cmd_stream >> arg;
-        args.push_back(arg);
-    }
     char** fmt_args = new char*[args.size() + 1];
     for (int i = 0; i < args.size(); i++) {
         fmt_args[i] = new char[args[i].size()];
@@ -123,6 +136,7 @@ void run(const string cmd, const ostream& output) {
 
     if (int pid = fork()) {
         wait(nullptr);
+        return;
     }
     else {
         execv(executable.c_str(), fmt_args);

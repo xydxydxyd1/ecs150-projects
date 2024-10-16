@@ -11,13 +11,15 @@
 #include <wait.h>
 using namespace std;
 
+// TODO: Error check on syscalls
+
 const string PROMPT = "wish> ";
 const string ERR_MSG = "An error has occurred";
 
 void interactive();
 void batch(char** filenames, int num_files);
 
-void run(const string cmd, const ostream& output);
+void run_expr(const string cmd, const ostream& output);
 string get_firstword(const string& cmd);
 string get_executable(const string& name);
 
@@ -32,7 +34,7 @@ void interactive() {
     while (is_running) {
         cout << PROMPT;
         getline(cin, input);
-        run(input, cout);
+        run_expr(input, cout);
     }
 }
 
@@ -145,13 +147,15 @@ string get_token(istream& stream) {
     return token;
 }
 
-/// Run a `cmd`. Throw `invalid_argument` if command failed to be executed
-void run(const string cmd, const ostream& output) {
+/// Run an expression, which includes commands combined with redirection and
+/// parallel execution. Throw `invalid_argument` if command failed to be
+/// executed
+void run_expr(const string expr, const ostream& output = cout) {
     // Preprocessing
     string name;
     vector<string> args;
     int out = STDOUT_FILENO;
-    istringstream cmd_stream(cmd);
+    istringstream cmd_stream(expr);
     cmd_stream >> name;
     if (name.size() == 0)
         return;
@@ -190,6 +194,49 @@ void run(const string cmd, const ostream& output) {
     else {
         if (out != STDOUT_FILENO) {
             if (dup2(out, STDOUT_FILENO) == -1) {
+                cerr << ERR_MSG << endl;
+                return;
+            }
+        }
+        execv(executable.c_str(), fmt_args);
+    }
+}
+
+/// Run a single command, the lowest unit of execution.
+///
+/// `name` is the name of the executable or builtin command. If it is not a
+/// builtin command, `wish` will search through `path` and use the first
+/// matching executable
+void run_cmd(string name, vector<string> args, int fd_out) {
+    // Built-in command
+    try {
+        Command builtin_cmd = builtin_cmds.at(name);
+        builtin_cmd(args);
+        return;
+    } catch(const out_of_range& err) {}
+
+    // Everything else
+
+    string executable = get_executable(name);
+    if (executable.size() == 0) {
+        cerr << ERR_MSG << endl;
+        return;
+    }
+
+    char** fmt_args = new char*[args.size() + 1];
+    for (int i = 0; i < args.size(); i++) {
+        fmt_args[i] = new char[args[i].size()];
+        strcpy(fmt_args[i], args[i].c_str());
+    }
+    fmt_args[args.size()] = nullptr;
+
+    if (int pid = fork()) {
+        wait(nullptr);
+        return;
+    }
+    else {
+        if (fd_out != STDOUT_FILENO) {
+            if (dup2(fd_out, STDOUT_FILENO) == -1) {
                 cerr << ERR_MSG << endl;
                 return;
             }

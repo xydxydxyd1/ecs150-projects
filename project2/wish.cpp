@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
+#include <fcntl.h>
 #include <unordered_map>
 #include <vector>
 #include <wait.h>
@@ -96,20 +97,67 @@ string get_executable(const string& name) {
     return out;
 }
 
-/// Run a `cmd`
+/// Extract a token from `stream`. Throw `invalid_argument` if no token can be
+/// extracted.
+///
+/// A token is the smallest lexical unit of a command. It delimited by spaces
+/// except the following cases:
+/// - '>': redirection token, which is a token that delimites
+string get_token(istream& stream) {
+    string token;
+    char quotechar = 0;
+    while (!stream.eof()) {
+        char buf = stream.peek();
+        if (buf == '>') {
+            if (token.empty()) {
+                stream.get();
+                return ">";
+            }
+            else
+                break;
+        }
+
+        stream.get();
+        if (isspace(buf)) {
+            if (token.empty())
+                continue;
+            else if (quotechar == 0)
+                break;
+        }
+
+        if (buf == '"' || buf == '\'') {
+            if (quotechar == 0) {
+                quotechar = buf;
+                continue;
+            }
+            else if (quotechar == buf) {
+                quotechar = 0;
+                continue;
+            }
+        }
+
+        token.push_back(buf);
+    }
+    if (token.empty())
+        throw invalid_argument("failed to extract token");
+    cout << "Got token: " << token << endl;
+    return token;
+}
+
+/// Run a `cmd`. Throw `invalid_argument` if command failed to be executed
 void run(const string cmd, const ostream& output) {
     // Preprocessing
-    istringstream cmd_stream(cmd);
     string name;
+    vector<string> args;
+    int out = STDOUT_FILENO;
+    istringstream cmd_stream(cmd);
     cmd_stream >> name;
     if (name.size() == 0)
         return;
-    vector<string> args;
     args.push_back(name);
     while (!cmd_stream.eof()) {
-        string arg;
-        cmd_stream >> arg;
-        args.push_back(arg);
+        string token = get_token(cmd_stream);
+        args.push_back(token);
     }
 
     // Built-in command
@@ -139,6 +187,12 @@ void run(const string cmd, const ostream& output) {
         return;
     }
     else {
+        if (out != STDOUT_FILENO) {
+            if (dup2(out, STDOUT_FILENO) == -1) {
+                cerr << ERR_MSG << endl;
+                return;
+            }
+        }
         execv(executable.c_str(), fmt_args);
     }
 }

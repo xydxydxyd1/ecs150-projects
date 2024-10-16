@@ -118,13 +118,15 @@ string get_token(istream& stream) {
         }
 
         stream.get();
+        if (buf == EOF) {
+            break;
+        }
         if (isspace(buf)) {
             if (token.empty())
                 continue;
             else if (quotechar == 0)
                 break;
         }
-
         if (buf == '"' || buf == '\'') {
             if (quotechar == 0) {
                 quotechar = buf;
@@ -140,7 +142,6 @@ string get_token(istream& stream) {
     }
     if (token.empty())
         throw invalid_argument("failed to extract token");
-    cout << "Got token: " << token << endl;
     return token;
 }
 
@@ -201,8 +202,12 @@ int main(int argc, char** argv) {
     if (argc == 1) {
         interactive();
     }
-    else {
+    else if (argc == 2) {
         batch(&(argv[1]), argc - 1);
+    }
+    else {
+        cerr << ERR_MSG << endl;
+        return 1;
     }
     return 0;
 }

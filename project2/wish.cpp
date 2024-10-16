@@ -20,6 +20,7 @@ void interactive();
 void batch(char** filenames, int num_files);
 
 void run_expr(const string cmd, const ostream& output);
+void run_cmd(string name, vector<string> args, int fd_out);
 string get_firstword(const string& cmd);
 string get_executable(const string& name);
 
@@ -148,7 +149,7 @@ string get_token(istream& stream) {
 }
 
 /// Run an expression, which includes commands combined with redirection and
-/// parallel execution. Throw `invalid_argument` if command failed to be
+/// flow control. Throw `invalid_argument` if command failed to be
 /// executed
 void run_expr(const string expr, const ostream& output = cout) {
     // Preprocessing
@@ -164,42 +165,7 @@ void run_expr(const string expr, const ostream& output = cout) {
         string token = get_token(cmd_stream);
         args.push_back(token);
     }
-
-    // Built-in command
-    try {
-        Command builtin_cmd = builtin_cmds.at(name);
-        builtin_cmd(args);
-        return;
-    } catch(const out_of_range& err) {}
-
-    // Everything else
-
-    string executable = get_executable(name);
-    if (executable.size() == 0) {
-        cerr << ERR_MSG << endl;
-        return;
-    }
-
-    char** fmt_args = new char*[args.size() + 1];
-    for (int i = 0; i < args.size(); i++) {
-        fmt_args[i] = new char[args[i].size()];
-        strcpy(fmt_args[i], args[i].c_str());
-    }
-    fmt_args[args.size()] = nullptr;
-
-    if (int pid = fork()) {
-        wait(nullptr);
-        return;
-    }
-    else {
-        if (out != STDOUT_FILENO) {
-            if (dup2(out, STDOUT_FILENO) == -1) {
-                cerr << ERR_MSG << endl;
-                return;
-            }
-        }
-        execv(executable.c_str(), fmt_args);
-    }
+    run_cmd(name, args, out);
 }
 
 /// Run a single command, the lowest unit of execution.

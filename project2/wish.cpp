@@ -19,7 +19,7 @@ const string ERR_MSG = "An error has occurred";
 void interactive();
 void batch(char** filenames, int num_files);
 
-void run_expr(const string cmd, const ostream& output);
+void run_expr(const string expr);
 void run_cmd(string name, vector<string> args, int fd_out);
 string get_firstword(const string& cmd);
 string get_executable(const string& name);
@@ -34,8 +34,13 @@ void interactive() {
     string input;
     while (is_running) {
         cout << PROMPT;
-        getline(cin, input);
-        run_expr(input, cout);
+        try {
+            getline(cin, input);
+            run_expr(input);
+        } catch (invalid_argument& e) {
+            cerr << ERR_MSG << endl;
+            return;
+        }
     }
 }
 
@@ -151,21 +156,36 @@ string get_token(istream& stream) {
 /// Run an expression, which includes commands combined with redirection and
 /// flow control. Throw `invalid_argument` if command failed to be
 /// executed
-void run_expr(const string expr, const ostream& output = cout) {
+void run_expr(const string expr) {
     // Preprocessing
+    int fd_out = STDOUT_FILENO;
     string name;
     vector<string> args;
-    int out = STDOUT_FILENO;
     istringstream cmd_stream(expr);
     cmd_stream >> name;
     if (name.size() == 0)
         return;
     args.push_back(name);
+
     while (!cmd_stream.eof()) {
         string token = get_token(cmd_stream);
+        if (token == ">") {
+            token = get_token(cmd_stream);
+            try {
+                token = get_token(cmd_stream);
+                // No more tokens should be available, which would throw
+                // invalid_argument before here.
+                cerr << ERR_MSG << endl;
+                return;
+            } catch (invalid_argument& e) {}
+            if ((fd_out = open(token.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666)) == -1)
+                throw invalid_argument("failed to open file " + token);
+            break;
+        }
         args.push_back(token);
     }
-    run_cmd(name, args, out);
+
+    run_cmd(name, args, fd_out);
 }
 
 /// Run a single command, the lowest unit of execution.
@@ -208,6 +228,8 @@ void run_cmd(string name, vector<string> args, int fd_out) {
             }
         }
         execv(executable.c_str(), fmt_args);
+        cerr << ERR_MSG << endl;
+        return;
     }
 }
 

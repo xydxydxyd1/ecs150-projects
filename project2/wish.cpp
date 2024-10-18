@@ -17,6 +17,7 @@ using namespace std;
 
 const string PROMPT = "wish> ";
 const string ERR_MSG = "An error has occurred";
+const bool DEBUG = false;
 
 void wish();
 
@@ -37,8 +38,9 @@ void interactive() {
             getline(cin, input);
             run_expr(input);
         } catch (invalid_argument& e) {
+            if (DEBUG)
+                cout << e.what() << endl;
             cerr << ERR_MSG << endl;
-            return;
         }
     }
 }
@@ -49,8 +51,9 @@ void batch(istream& in) {
             getline(in, input);
             run_expr(input);
         } catch (invalid_argument& e) {
+            if (DEBUG)
+                cout << e.what() << endl;
             cerr << ERR_MSG << endl;
-            return;
         }
     }
 }
@@ -68,11 +71,13 @@ vector<string> paths{"/bin"};
 typedef function<void(vector<string>)> BuiltinCmd;
 
 void builtin_exit(vector<string> args) {
+    if (args.size() != 1)
+        throw invalid_argument("usage: exit");
     exit(0);
 }
 void builtin_cd(vector<string> args) {
     if (args.size() != 2)
-        throw invalid_argument("cd [directory]");
+        throw invalid_argument("usage: cd [directory]");
     chdir(args[1].c_str());
 }
 void builtin_path(vector<string> args) {

@@ -35,13 +35,13 @@ void interactive() {
     string input;
     while (is_running) {
         cout << PROMPT;
-        //try {
+        try {
             getline(cin, input);
             run_expr(input);
-        //} catch (invalid_argument& e) {
-        //    cerr << ERR_MSG << endl;
-        //    return;
-        //}
+        } catch (invalid_argument& e) {
+            cerr << ERR_MSG << endl;
+            return;
+        }
     }
 }
 
@@ -154,10 +154,89 @@ string get_token(istream& stream) {
     return token;
 }
 
-struct CommandInfo {
-    string filename;
-    string name;
+/// Contains information of a command and methods to construct/execute it
+class Command {
+  public:
+    string out_filename;
+    string cmd_name;
     vector<string> args;
+
+    /// Read a command from the stream.
+    ///
+    /// A command is delimited by either newline '\n' or concurrency '&'. In
+    /// each case, the delimiter is consumed.
+    Command(istream& stream) {
+        cmd_name = get_token(stream);
+        if (cmd_name.size() == 0)
+            return;
+        args.push_back(cmd_name);
+
+        while (!stream.eof()) {
+            string token = get_token(stream);
+            if (token == ">") {
+                token = get_token(stream);
+                try {
+                    token = get_token(stream);
+                    // No more tokens should be available, which would throw
+                    // invalid_argument before here.
+                    cerr << ERR_MSG << endl;
+                    return;
+                } catch (invalid_argument& e) {}
+                out_filename = token.c_str();
+                break;
+            }
+            args.push_back(token);
+        }
+    }
+
+    void execute() {
+        int fd_out;
+        if (out_filename.empty())
+            fd_out = STDOUT_FILENO;
+        else {
+            fd_out = open(out_filename.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
+            if (fd_out  == -1)
+                throw invalid_argument("failed to open file " + out_filename);
+        }
+
+        // Built-in command
+        try {
+            BuiltinCmd builtin_cmd = builtin_cmds.at(cmd_name);
+            builtin_cmd(args);
+            return;
+        } catch(const out_of_range& err) {}
+
+        // Everything else
+
+        string executable = get_executable(cmd_name);
+        if (executable.size() == 0) {
+            cerr << ERR_MSG << endl;
+            return;
+        }
+
+        char** fmt_args = new char*[args.size() + 1];
+        for (int i = 0; i < args.size(); i++) {
+            fmt_args[i] = new char[args[i].size()];
+            strcpy(fmt_args[i], args[i].c_str());
+        }
+        fmt_args[args.size()] = nullptr;
+
+        if (int pid = fork()) {
+            wait(nullptr);
+            return;
+        }
+        else {
+            if (fd_out != STDOUT_FILENO) {
+                if (dup2(fd_out, STDOUT_FILENO) == -1) {
+                    cerr << ERR_MSG << endl;
+                    return;
+                }
+            }
+            execv(executable.c_str(), fmt_args);
+            cerr << ERR_MSG << endl;
+            return;
+        }
+    }
 };
 
 /// Run an expression, which includes commands combined with redirection and
@@ -165,33 +244,10 @@ struct CommandInfo {
 /// executed
 void run_expr(const string expr) {
     // Preprocessing
-    string filename;
-    string name;
-    vector<string> args;
     istringstream cmd_stream(expr);
-    cmd_stream >> name;
-    if (name.size() == 0)
-        return;
-    args.push_back(name);
 
-    while (!cmd_stream.eof()) {
-        string token = get_token(cmd_stream);
-        if (token == ">") {
-            token = get_token(cmd_stream);
-            try {
-                token = get_token(cmd_stream);
-                // No more tokens should be available, which would throw
-                // invalid_argument before here.
-                cerr << ERR_MSG << endl;
-                return;
-            } catch (invalid_argument& e) {}
-            filename = token.c_str();
-            break;
-        }
-        args.push_back(token);
-    }
-
-    run_cmd(name, args, filename);
+    Command cmd(cmd_stream);
+    cmd.execute();
 }
 
 /// Run a single command, the lowest unit of execution.

@@ -12,7 +12,7 @@
 using namespace std;
 
 // TODO: Error check on syscalls
-// IN PROGRESS: Concurrency
+// IN PROGRESS: Concurrency -- separating stuff rn
 
 const string PROMPT = "wish> ";
 const string ERR_MSG = "An error has occurred";
@@ -73,7 +73,7 @@ void builtin_path(vector<string> args) {
     paths = vector<string>(args.begin() + 1, args.end());
 }
 
-unordered_map<string, BuiltinCmd> builtin_cmds{
+const unordered_map<string, BuiltinCmd> builtin_cmds{
     {"exit", builtin_exit},
     {"cd", builtin_cd},
     {"path", builtin_path},
@@ -157,10 +157,17 @@ string get_token(istream& stream) {
 class Command {
   private:
     string out_filename;
-  public:
     string cmd_name;
     vector<string> args;
 
+    bool parsed = false;
+    int fd_out;
+    /// nullptr if not builtin_cmd
+    const BuiltinCmd* builtin_cmd = nullptr;
+    /// empty string if builtin_cmd
+    string executable;
+    char ** fmt_args = nullptr;
+  public:
     /// Read a command from the stream.
     ///
     /// A command is delimited by either newline '\n' or concurrency '&'. In
@@ -189,9 +196,20 @@ class Command {
         }
     }
 
-    /// Execute the command
-    void execute() {
-        int fd_out;
+    ~Command() {
+        if (fmt_args == nullptr)
+            return;
+
+        for (int i = 0; fmt_args[i] != nullptr; i++) {
+            delete fmt_args[i];
+        }
+        delete fmt_args;
+    }
+
+    /// Parse the command before executing, performing error checks
+    /// and provide information about the command. If error, throws
+    /// `invalid_argument`
+    void parse() {
         if (out_filename.empty())
             fd_out = STDOUT_FILENO;
         else {
@@ -200,43 +218,49 @@ class Command {
                 throw invalid_argument("failed to open file " + out_filename);
         }
 
-        // Built-in command
         try {
-            BuiltinCmd builtin_cmd = builtin_cmds.at(cmd_name);
-            builtin_cmd(args);
+            builtin_cmd = &(builtin_cmds.at(cmd_name));
             return;
         } catch(const out_of_range& err) {}
 
-        // Everything else
-
-        string executable = get_executable(cmd_name);
+        executable = get_executable(cmd_name);
         if (executable.size() == 0) {
-            cerr << ERR_MSG << endl;
-            return;
+            throw invalid_argument("command " + cmd_name + " not found");
         }
 
-        char** fmt_args = new char*[args.size() + 1];
+        fmt_args = new char*[args.size() + 1];
         for (int i = 0; i < args.size(); i++) {
             fmt_args[i] = new char[args[i].size()];
             strcpy(fmt_args[i], args[i].c_str());
         }
         fmt_args[args.size()] = nullptr;
 
-        if (int pid = fork()) {
-            wait(nullptr);
+        parsed = true;
+    }
+
+    bool is_builtin() {
+        return builtin_cmd != nullptr;
+    }
+
+    /// Execute the command.
+    ///
+    /// If the command is not parsed, throws `domain_error`. If the command is
+    /// builtin, run in the same process and return. Otherwise, replace current
+    /// process with executing program.
+    void execute() {
+        if (!parsed)
+            throw domain_error("command is not parsed");
+
+        if (builtin_cmd != nullptr) {
+            (*builtin_cmd)(args);
             return;
         }
-        else {
-            if (fd_out != STDOUT_FILENO) {
-                if (dup2(fd_out, STDOUT_FILENO) == -1) {
-                    cerr << ERR_MSG << endl;
-                    return;
-                }
-            }
-            execv(executable.c_str(), fmt_args);
-            cerr << ERR_MSG << endl;
-            return;
+
+        if (dup2(fd_out, STDOUT_FILENO) == -1) {
+            throw invalid_argument("redirection error");
         }
+        execv(executable.c_str(), fmt_args);
+        throw invalid_argument("non-builtin execution failed");
     }
 };
 
@@ -248,7 +272,16 @@ void run_expr(const string expr) {
     istringstream cmd_stream(expr);
 
     Command cmd(cmd_stream);
-    cmd.execute();
+    cmd.parse();
+    if (cmd.is_builtin()) {
+        cmd.execute();
+        return;
+    }
+
+    int pid = fork();
+    if (pid == 0)
+        cmd.execute();
+    waitpid(pid, nullptr, 0);
 }
 
 int main(int argc, char** argv) {

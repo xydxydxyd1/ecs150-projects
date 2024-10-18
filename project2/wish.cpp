@@ -21,7 +21,6 @@ void interactive();
 void batch(char** filenames, int num_files);
 
 void run_expr(const string expr);
-void run_cmd(string name, vector<string> args, string filename);
 string get_firstword(const string& cmd);
 string get_executable(const string& name);
 
@@ -156,8 +155,9 @@ string get_token(istream& stream) {
 
 /// Contains information of a command and methods to construct/execute it
 class Command {
-  public:
+  private:
     string out_filename;
+  public:
     string cmd_name;
     vector<string> args;
 
@@ -189,6 +189,7 @@ class Command {
         }
     }
 
+    /// Execute the command
     void execute() {
         int fd_out;
         if (out_filename.empty())
@@ -248,60 +249,6 @@ void run_expr(const string expr) {
 
     Command cmd(cmd_stream);
     cmd.execute();
-}
-
-/// Run a single command, the lowest unit of execution.
-///
-/// `name` is the name of the executable or builtin command. If it is not a
-/// builtin command, `wish` will search through `path` and use the first
-/// matching executable
-void run_cmd(string name, vector<string> args, string filename) {
-    int fd_out;
-    if (filename.empty())
-        fd_out = STDOUT_FILENO;
-    else {
-        fd_out = open(filename.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
-        if (fd_out  == -1)
-            throw invalid_argument("failed to open file " + filename);
-    }
-
-    // Built-in command
-    try {
-        BuiltinCmd builtin_cmd = builtin_cmds.at(name);
-        builtin_cmd(args);
-        return;
-    } catch(const out_of_range& err) {}
-
-    // Everything else
-
-    string executable = get_executable(name);
-    if (executable.size() == 0) {
-        cerr << ERR_MSG << endl;
-        return;
-    }
-
-    char** fmt_args = new char*[args.size() + 1];
-    for (int i = 0; i < args.size(); i++) {
-        fmt_args[i] = new char[args[i].size()];
-        strcpy(fmt_args[i], args[i].c_str());
-    }
-    fmt_args[args.size()] = nullptr;
-
-    if (int pid = fork()) {
-        wait(nullptr);
-        return;
-    }
-    else {
-        if (fd_out != STDOUT_FILENO) {
-            if (dup2(fd_out, STDOUT_FILENO) == -1) {
-                cerr << ERR_MSG << endl;
-                return;
-            }
-        }
-        execv(executable.c_str(), fmt_args);
-        cerr << ERR_MSG << endl;
-        return;
-    }
 }
 
 int main(int argc, char** argv) {

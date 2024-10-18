@@ -193,6 +193,7 @@ class Command {
                 break;
             }
             if (token == "&") {
+                return;
             }
             args.push_back(token);
         }
@@ -276,17 +277,32 @@ void run_expr(const string expr) {
     // Preprocessing
     istringstream cmd_stream(expr);
 
-    Command cmd(cmd_stream);
-    cmd.parse();
-    if (cmd.is_builtin()) {
-        cmd.execute();
-        return;
+    vector<Command> cmds;
+    vector<pid_t> pids;
+    while (!cmd_stream.eof()) {
+        cmds.push_back(Command(cmd_stream));
     }
 
-    int pid = fork();
-    if (pid == 0)
-        cmd.execute();
-    waitpid(pid, nullptr, 0);
+    for (Command& cmd : cmds) {
+        cmd.parse();
+        if (cmd.is_builtin()) {
+            if (cmds.size() > 1)
+                throw invalid_argument("builtin command in parallel expression");
+            cmd.execute();
+        }
+        else {
+            int pid = fork();
+            if (pid == 0) {
+                cmd.execute();
+                throw invalid_argument("failed to execute command");
+            }
+            pids.push_back(pid);
+        }
+    }
+
+    for (pid_t pid : pids) {
+        waitpid(pid, nullptr, 0);
+    }
 }
 
 int main(int argc, char** argv) {

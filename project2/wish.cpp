@@ -116,13 +116,13 @@ string get_token(istream& stream) {
     char quotechar = 0;
     while (!stream.eof()) {
         char buf = stream.peek();
-        if (buf == '>') {
+        // Non-space delimiters
+        if (buf == '>' || buf == '&') {
             if (token.empty()) {
                 stream.get();
-                return ">";
+                token.push_back(buf);
             }
-            else
-                break;
+            break;
         }
 
         stream.get();
@@ -191,6 +191,8 @@ class Command {
                 } catch (invalid_argument& e) {}
                 out_filename = token.c_str();
                 break;
+            }
+            if (token == "&") {
             }
             args.push_back(token);
         }
@@ -264,9 +266,11 @@ class Command {
     }
 };
 
-/// Run an expression, which includes commands combined with redirection and
-/// flow control. Throw `invalid_argument` if command failed to be
-/// executed
+/// Run an expression
+///
+/// An expression is a single line of instruction, including zero or more
+/// commands combined with redirection and flow control. Throw
+/// `invalid_argument` if expression failed to be executed
 void run_expr(const string expr) {
     // Preprocessing
     istringstream cmd_stream(expr);

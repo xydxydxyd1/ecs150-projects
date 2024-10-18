@@ -6,19 +6,19 @@
 #include <string>
 #include <unistd.h>
 #include <fcntl.h>
+#include <fstream>
 #include <unordered_map>
 #include <vector>
 #include <wait.h>
 using namespace std;
 
 // TODO: Error check on syscalls
-// IN PROGRESS: Concurrency -- separating stuff rn
+// Batch
 
 const string PROMPT = "wish> ";
 const string ERR_MSG = "An error has occurred";
 
-void interactive();
-void batch(char** filenames, int num_files);
+void wish();
 
 void run_expr(const string expr);
 string get_firstword(const string& cmd);
@@ -34,20 +34,28 @@ void interactive() {
     string input;
     while (is_running) {
         cout << PROMPT;
-        try {
+        //try {
             getline(cin, input);
             run_expr(input);
-        } catch (invalid_argument& e) {
-            cerr << ERR_MSG << endl;
-            return;
-        }
+        //} catch (invalid_argument& e) {
+        //    cerr << ERR_MSG << endl;
+        //    return;
+        //}
     }
 }
-
-/// Main program in batch mode
-void batch(char** filenames, int num_files) {
+void batch(istream& in) {
+    bool is_running = true;
+    string input;
+    while (is_running) {
+        //try {
+            getline(in, input);
+            run_expr(input);
+        //} catch (invalid_argument& e) {
+        //    cerr << ERR_MSG << endl;
+        //    return;
+        //}
+    }
 }
-
 
 // Commands
 
@@ -173,13 +181,20 @@ class Command {
     /// A command is delimited by either newline '\n' or concurrency '&'. In
     /// each case, the delimiter is consumed.
     Command(istream& stream) {
-        cmd_name = get_token(stream);
-        if (cmd_name.size() == 0)
+        try {
+            cmd_name = get_token(stream);
+        } catch (invalid_argument& e) {
             return;
+        }
         args.push_back(cmd_name);
 
         while (!stream.eof()) {
-            string token = get_token(stream);
+            string token;
+            try {
+                token = get_token(stream);
+            } catch (invalid_argument& err) {
+                break;
+            }
             if (token == ">") {
                 token = get_token(stream);
                 try {
@@ -213,6 +228,11 @@ class Command {
     /// and provide information about the command. If error, throws
     /// `invalid_argument`
     void parse() {
+        if (cmd_name.empty()) {
+            parsed = true;
+            return;
+        }
+
         if (out_filename.empty())
             fd_out = STDOUT_FILENO;
         else {
@@ -243,6 +263,8 @@ class Command {
     }
 
     bool is_builtin() {
+        if (!parsed)
+            throw domain_error("command not parsed yet");
         return builtin_cmd != nullptr;
     }
 
@@ -255,6 +277,9 @@ class Command {
         if (!parsed)
             throw domain_error("command is not parsed");
 
+        if (cmd_name.empty())
+            return;
+
         if (builtin_cmd != nullptr) {
             (*builtin_cmd)(args);
             return;
@@ -265,6 +290,15 @@ class Command {
         }
         execv(executable.c_str(), fmt_args);
         throw invalid_argument("non-builtin execution failed");
+    }
+    string to_string() {
+        ostringstream out;
+        out << cmd_name;
+        for (string arg : args) {
+            out << " " << arg;
+        }
+        out << endl;
+        return out.str();
     }
 };
 
@@ -294,7 +328,7 @@ void run_expr(const string expr) {
             int pid = fork();
             if (pid == 0) {
                 cmd.execute();
-                throw invalid_argument("failed to execute command");
+                throw invalid_argument("failed to execute command " + cmd.to_string());
             }
             pids.push_back(pid);
         }
@@ -310,7 +344,8 @@ int main(int argc, char** argv) {
         interactive();
     }
     else if (argc == 2) {
-        batch(&(argv[1]), argc - 1);
+        ifstream file(argv[1]);
+        batch(file);
     }
     else {
         cerr << ERR_MSG << endl;

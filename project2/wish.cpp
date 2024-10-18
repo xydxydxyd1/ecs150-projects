@@ -200,13 +200,14 @@ class Command {
             }
             if (token == ">") {
                 token = get_token(stream);
+
+                string extra;
                 try {
-                    token = get_token(stream);
-                    // No more tokens should be available, which would throw
-                    // invalid_argument before here.
-                    cerr << ERR_MSG << endl;
-                    return;
+                    extra = get_token(stream);
                 } catch (invalid_argument& e) {}
+                if (extra != "&")
+                    throw invalid_argument("extra token after redirection");
+
                 out_filename = token.c_str();
                 break;
             }

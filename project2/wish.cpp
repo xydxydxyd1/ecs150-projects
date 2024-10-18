@@ -1,33 +1,32 @@
 // `wish`, the Wisconsin Shell
 #include <cstring>
+#include <fcntl.h>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <unistd.h>
-#include <fcntl.h>
-#include <fstream>
 #include <unordered_map>
 #include <vector>
 #include <wait.h>
 using namespace std;
 
-// TODO: Error check on syscalls
-// Batch
-
 const string PROMPT = "wish> ";
 const string ERR_MSG = "An error has occurred";
 const bool DEBUG = false;
 
-void wish();
+void interactive();
+void batch(istream& in);
 
-void run_expr(const string expr);
-string get_firstword(const string& cmd);
+void builtin_exit(vector<string> args);
+void builtin_cd(vector<string> args);
+void builtin_path(vector<string> args);
+
 string get_executable(const string& name);
-
-void builtin_exit(vector<string>);
-void builtin_cd(vector<string>);
-void builtin_path(vector<string>);
+string get_token(istream& stream);
+class Command;
+void run_expr(const string expr);
 
 /// Main program in interactive mode
 void interactive() {
@@ -67,7 +66,6 @@ vector<string> paths{"/bin"};
 ///
 /// If command failed to execute, throws `std::invalid_argument` with the
 /// correct usage.
-
 typedef function<void(vector<string>)> BuiltinCmd;
 
 void builtin_exit(vector<string> args) {
@@ -90,14 +88,6 @@ const unordered_map<string, BuiltinCmd> builtin_cmds{
     {"path", builtin_path},
 };
 
-/// Return the first word in `cmd`
-string get_firstword(const string& cmd) {
-    istringstream cmd_stream(cmd);
-    string id;
-    cmd_stream >> id;
-    return id;
-}
-
 /// Return the full path of an executable for `name`. If one cannot be found,
 /// return an empty string.
 ///
@@ -117,12 +107,12 @@ string get_executable(const string& name) {
 }
 
 /// Extract a token from `stream`. Throw `invalid_argument` if no token can be
-/// extracted. `stream` is positioned to the next token (white space are
-/// truncated).
+/// extracted.
 ///
-/// A token is the smallest lexical unit of a command. It delimited by spaces
-/// except the following cases:
-/// - '>': redirection token, which is a token that delimites
+/// A token is the smallest lexical unit of a command. It delimited by
+/// - whitespace, which do not count as tokens
+/// - token '>'
+/// - token '&'
 string get_token(istream& stream) {
     string token;
     char quotechar = 0;
@@ -162,15 +152,6 @@ string get_token(istream& stream) {
     }
     if (token.empty())
         throw invalid_argument("failed to extract token");
-
-    // Remove trailing spaces
-    while (!stream.eof()) {
-        char buf = stream.peek();
-        if (!isspace(buf)) {
-            break;
-        }
-        stream.get();
-    }
     return token;
 }
 
@@ -181,7 +162,7 @@ class Command {
     string cmd_name;
     vector<string> args;
 
-    bool parsed = false;
+    bool preprocessed = false;
     int fd_out;
     /// nullptr if not builtin_cmd
     const BuiltinCmd* builtin_cmd = nullptr;
@@ -191,8 +172,7 @@ class Command {
   public:
     /// Read a command from the stream.
     ///
-    /// A command is delimited by either newline '\n' or concurrency '&'. In
-    /// each case, the delimiter is consumed.
+    /// Commands are delimited by '&'. This delimiter token is consumed.
     Command(istream& stream) {
         while (!stream.eof()) {
             string token;
@@ -235,12 +215,11 @@ class Command {
         delete fmt_args;
     }
 
-    /// Parse the command before executing, performing error checks
-    /// and provide information about the command. If error, throws
-    /// `invalid_argument`
-    void parse() {
+    /// Preprocess the command for shell-level errors before execution. If
+    /// preprocess failed, throw `invalid_argument`.
+    void preprocess() {
         if (cmd_name.empty()) {
-            parsed = true;
+            preprocessed = true;
             return;
         }
 
@@ -254,7 +233,7 @@ class Command {
 
         try {
             builtin_cmd = &(builtin_cmds.at(cmd_name));
-            parsed = true;
+            preprocessed = true;
             return;
         } catch(const out_of_range& err) {}
 
@@ -264,18 +243,18 @@ class Command {
         }
 
         fmt_args = new char*[args.size() + 1];
-        for (int i = 0; i < args.size(); i++) {
+        for (unsigned i = 0; i < args.size(); i++) {
             fmt_args[i] = new char[args[i].size()];
             strcpy(fmt_args[i], args[i].c_str());
         }
         fmt_args[args.size()] = nullptr;
 
-        parsed = true;
+        preprocessed = true;
     }
 
     bool is_builtin() {
-        if (!parsed)
-            throw domain_error("command not parsed yet");
+        if (!preprocessed)
+            throw domain_error("command not preprocessed yet");
         return builtin_cmd != nullptr;
     }
 
@@ -285,12 +264,12 @@ class Command {
 
     /// Execute the command.
     ///
-    /// If the command is not parsed, throws `domain_error`. If the command is
-    /// builtin, run in the same process and return. Otherwise, replace current
-    /// process with executing program.
+    /// If the command is not preprocessed, throws `domain_error`. If the
+    /// command is builtin, run in the same process and return. Otherwise,
+    /// replace current process with executing program.
     void execute() {
-        if (!parsed)
-            throw domain_error("command is not parsed");
+        if (!preprocessed)
+            throw domain_error("command is not preprocessed. Run `cmd.preprocess()`");
 
         if (cmd_name.empty())
             return;
@@ -322,7 +301,6 @@ class Command {
 /// commands combined with redirection and flow control. Throw
 /// `invalid_argument` if expression failed to be executed
 void run_expr(const string expr) {
-    // Preprocessing
     istringstream cmd_stream(expr);
 
     vector<Command> cmds;
@@ -334,7 +312,7 @@ void run_expr(const string expr) {
     }
 
     for (Command& cmd : cmds) {
-        cmd.parse();
+        cmd.preprocess();
         if (cmd.is_builtin()) {
             if (cmds.size() > 1)
                 throw invalid_argument("builtin command in parallel expression");

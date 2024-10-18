@@ -205,7 +205,7 @@ class Command {
                 try {
                     extra = get_token(stream);
                 } catch (invalid_argument& e) {}
-                if (extra != "&")
+                if (!(extra.empty() || extra == "&"))
                     throw invalid_argument("extra token after redirection");
 
                 out_filename = token.c_str();
@@ -355,6 +355,10 @@ int main(int argc, char** argv) {
     }
     else if (argc == 2) {
         ifstream file(argv[1]);
+        if (!file.is_open()) {
+            cerr << ERR_MSG << endl;
+            return 1;
+        }
         batch(file);
     }
     else {

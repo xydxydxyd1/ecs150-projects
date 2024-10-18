@@ -279,9 +279,10 @@ class Command {
             return;
         }
 
-        if (dup2(fd_out, STDOUT_FILENO) == -1) {
-            throw invalid_argument("redirection error");
-        }
+        if (fd_out != STDOUT_FILENO)
+            if (dup2(fd_out, STDOUT_FILENO) == -1 || dup2(fd_out, STDERR_FILENO) == -1) {
+                throw invalid_argument("redirection error");
+            }
         execv(executable.c_str(), fmt_args);
         throw invalid_argument("non-builtin execution failed");
     }

@@ -217,7 +217,7 @@ class Command {
                 break;
             }
             if (token == "&") {
-                return;
+                break;
             }
             args.push_back(token);
         }
@@ -309,9 +309,8 @@ class Command {
 
     string to_string() {
         ostringstream out;
-        out << cmd_name;
         for (string arg : args) {
-            out << " " << arg;
+            out << arg << " ";
         }
         return out.str();
     }
@@ -330,8 +329,6 @@ void run_expr(const string expr) {
     vector<pid_t> pids;
     while (!cmd_stream.eof()) {
         Command cmd(cmd_stream);
-        //if (!cmds.empty() && (cmds[cmds.size() - 1].is_empty() || cmd.is_empty()))
-        //    throw invalid_argument("token '&' must be between two commands");
         if (!cmd.is_empty())
             cmds.push_back(std::move(cmd));
     }

@@ -33,25 +33,25 @@ void interactive() {
     string input;
     while (!cin.eof()) {
         cout << PROMPT;
-        //try {
+        try {
             getline(cin, input);
             run_expr(input);
-        //} catch (invalid_argument& e) {
-        //    cerr << ERR_MSG << endl;
-        //    return;
-        //}
+        } catch (invalid_argument& e) {
+            cerr << ERR_MSG << endl;
+            return;
+        }
     }
 }
 void batch(istream& in) {
     string input;
     while (!in.eof()) {
-        //try {
+        try {
             getline(in, input);
             run_expr(input);
-        //} catch (invalid_argument& e) {
-        //    cerr << ERR_MSG << endl;
-        //    return;
-        //}
+        } catch (invalid_argument& e) {
+            cerr << ERR_MSG << endl;
+            return;
+        }
     }
 }
 
@@ -72,7 +72,7 @@ void builtin_exit(vector<string> args) {
 }
 void builtin_cd(vector<string> args) {
     if (args.size() != 2)
-        throw invalid_argument("cd directory");
+        throw invalid_argument("cd [directory]");
     chdir(args[1].c_str());
 }
 void builtin_path(vector<string> args) {

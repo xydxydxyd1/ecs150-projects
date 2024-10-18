@@ -12,6 +12,7 @@
 using namespace std;
 
 // TODO: Error check on syscalls
+// IN PROGRESS: Concurrency
 
 const string PROMPT = "wish> ";
 const string ERR_MSG = "An error has occurred";
@@ -20,7 +21,7 @@ void interactive();
 void batch(char** filenames, int num_files);
 
 void run_expr(const string expr);
-void run_cmd(string name, vector<string> args, int fd_out);
+void run_cmd(string name, vector<string> args, string filename);
 string get_firstword(const string& cmd);
 string get_executable(const string& name);
 
@@ -34,13 +35,13 @@ void interactive() {
     string input;
     while (is_running) {
         cout << PROMPT;
-        try {
+        //try {
             getline(cin, input);
             run_expr(input);
-        } catch (invalid_argument& e) {
-            cerr << ERR_MSG << endl;
-            return;
-        }
+        //} catch (invalid_argument& e) {
+        //    cerr << ERR_MSG << endl;
+        //    return;
+        //}
     }
 }
 
@@ -59,7 +60,7 @@ vector<string> paths{"/bin"};
 /// If command failed to execute, throws `std::invalid_argument` with the
 /// correct usage.
 
-typedef function<void(vector<string>)> Command;
+typedef function<void(vector<string>)> BuiltinCmd;
 
 void builtin_exit(vector<string> args) {
     exit(0);
@@ -73,7 +74,7 @@ void builtin_path(vector<string> args) {
     paths = vector<string>(args.begin() + 1, args.end());
 }
 
-unordered_map<string, Command> builtin_cmds{
+unordered_map<string, BuiltinCmd> builtin_cmds{
     {"exit", builtin_exit},
     {"cd", builtin_cd},
     {"path", builtin_path},
@@ -153,12 +154,18 @@ string get_token(istream& stream) {
     return token;
 }
 
+struct CommandInfo {
+    string filename;
+    string name;
+    vector<string> args;
+};
+
 /// Run an expression, which includes commands combined with redirection and
 /// flow control. Throw `invalid_argument` if command failed to be
 /// executed
 void run_expr(const string expr) {
     // Preprocessing
-    int fd_out = STDOUT_FILENO;
+    string filename;
     string name;
     vector<string> args;
     istringstream cmd_stream(expr);
@@ -178,14 +185,13 @@ void run_expr(const string expr) {
                 cerr << ERR_MSG << endl;
                 return;
             } catch (invalid_argument& e) {}
-            if ((fd_out = open(token.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666)) == -1)
-                throw invalid_argument("failed to open file " + token);
+            filename = token.c_str();
             break;
         }
         args.push_back(token);
     }
 
-    run_cmd(name, args, fd_out);
+    run_cmd(name, args, filename);
 }
 
 /// Run a single command, the lowest unit of execution.
@@ -193,10 +199,19 @@ void run_expr(const string expr) {
 /// `name` is the name of the executable or builtin command. If it is not a
 /// builtin command, `wish` will search through `path` and use the first
 /// matching executable
-void run_cmd(string name, vector<string> args, int fd_out) {
+void run_cmd(string name, vector<string> args, string filename) {
+    int fd_out;
+    if (filename.empty())
+        fd_out = STDOUT_FILENO;
+    else {
+        fd_out = open(filename.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
+        if (fd_out  == -1)
+            throw invalid_argument("failed to open file " + filename);
+    }
+
     // Built-in command
     try {
-        Command builtin_cmd = builtin_cmds.at(name);
+        BuiltinCmd builtin_cmd = builtin_cmds.at(name);
         builtin_cmd(args);
         return;
     } catch(const out_of_range& err) {}

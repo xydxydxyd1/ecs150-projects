@@ -222,6 +222,7 @@ class Command {
 
         try {
             builtin_cmd = &(builtin_cmds.at(cmd_name));
+            parsed = true;
             return;
         } catch(const out_of_range& err) {}
 

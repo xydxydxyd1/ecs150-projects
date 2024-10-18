@@ -30,9 +30,8 @@ void builtin_path(vector<string>);
 
 /// Main program in interactive mode
 void interactive() {
-    bool is_running = true;
     string input;
-    while (is_running) {
+    while (!cin.eof()) {
         cout << PROMPT;
         //try {
             getline(cin, input);
@@ -44,9 +43,8 @@ void interactive() {
     }
 }
 void batch(istream& in) {
-    bool is_running = true;
     string input;
-    while (is_running) {
+    while (!in.eof()) {
         //try {
             getline(in, input);
             run_expr(input);
@@ -268,6 +266,10 @@ class Command {
         return builtin_cmd != nullptr;
     }
 
+    bool is_empty() {
+        return cmd_name.empty();
+    }
+
     /// Execute the command.
     ///
     /// If the command is not parsed, throws `domain_error`. If the command is
@@ -291,13 +293,13 @@ class Command {
         execv(executable.c_str(), fmt_args);
         throw invalid_argument("non-builtin execution failed");
     }
+
     string to_string() {
         ostringstream out;
         out << cmd_name;
         for (string arg : args) {
             out << " " << arg;
         }
-        out << endl;
         return out.str();
     }
 };
@@ -314,7 +316,9 @@ void run_expr(const string expr) {
     vector<Command> cmds;
     vector<pid_t> pids;
     while (!cmd_stream.eof()) {
-        cmds.push_back(Command(cmd_stream));
+        Command cmd(cmd_stream);
+        if (!cmd.is_empty())
+            cmds.push_back(std::move(cmd));
     }
 
     for (Command& cmd : cmds) {
@@ -324,11 +328,11 @@ void run_expr(const string expr) {
                 throw invalid_argument("builtin command in parallel expression");
             cmd.execute();
         }
-        else {
+        else if (!cmd.is_empty()) {
             int pid = fork();
             if (pid == 0) {
                 cmd.execute();
-                throw invalid_argument("failed to execute command " + cmd.to_string());
+                throw invalid_argument("failed to execute command \"" + cmd.to_string() + "\"");
             }
             pids.push_back(pid);
         }

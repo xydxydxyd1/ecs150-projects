@@ -117,7 +117,8 @@ string get_executable(const string& name) {
 }
 
 /// Extract a token from `stream`. Throw `invalid_argument` if no token can be
-/// extracted.
+/// extracted. `stream` is positioned to the next token (white space are
+/// truncated).
 ///
 /// A token is the smallest lexical unit of a command. It delimited by spaces
 /// except the following cases:
@@ -161,6 +162,15 @@ string get_token(istream& stream) {
     }
     if (token.empty())
         throw invalid_argument("failed to extract token");
+
+    // Remove trailing spaces
+    while (!stream.eof()) {
+        char buf = stream.peek();
+        if (!isspace(buf)) {
+            break;
+        }
+        stream.get();
+    }
     return token;
 }
 
@@ -184,13 +194,6 @@ class Command {
     /// A command is delimited by either newline '\n' or concurrency '&'. In
     /// each case, the delimiter is consumed.
     Command(istream& stream) {
-        try {
-            cmd_name = get_token(stream);
-        } catch (invalid_argument& e) {
-            return;
-        }
-        args.push_back(cmd_name);
-
         while (!stream.eof()) {
             string token;
             try {
@@ -199,6 +202,8 @@ class Command {
                 break;
             }
             if (token == ">") {
+                if (args.empty())
+                    throw invalid_argument("redirection must follow a command");
                 token = get_token(stream);
 
                 string extra;
@@ -216,6 +221,8 @@ class Command {
             }
             args.push_back(token);
         }
+        if (!args.empty())
+            cmd_name = args[0];
     }
 
     ~Command() {
@@ -323,6 +330,8 @@ void run_expr(const string expr) {
     vector<pid_t> pids;
     while (!cmd_stream.eof()) {
         Command cmd(cmd_stream);
+        //if (!cmds.empty() && (cmds[cmds.size() - 1].is_empty() || cmd.is_empty()))
+        //    throw invalid_argument("token '&' must be between two commands");
         if (!cmd.is_empty())
             cmds.push_back(std::move(cmd));
     }

@@ -1,0 +1,19 @@
+#!/usr/bin/zsh
+
+echo "INPUT: "
+cat tests/$1.in
+
+echo "\nCORRECT OUTPUT: "
+cat tests/$1.out
+
+echo "\nCORRECT ERR: "
+cat tests/$1.err
+
+echo "\nYOUR OUTPUT: "
+cat tests-out/$1.out
+
+echo "\nYOUR ERR: "
+cat tests-out/$1.err
+
+echo "\nRUN WITH: "
+cat tests/$1.run

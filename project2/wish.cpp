@@ -206,6 +206,9 @@ class Command {
     }
 
     ~Command() {
+        if (fd_out != STDOUT_FILENO)
+            close(fd_out);
+
         if (fmt_args == nullptr)
             return;
 

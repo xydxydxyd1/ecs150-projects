@@ -1,0 +1,3 @@
+# EditorConfig is awesome: https://EditorConfig.org
+[*.cpp]
+indent_size = 2

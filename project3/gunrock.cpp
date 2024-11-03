@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 #include <sstream>
-#include <deque>
+#include <queue>
+#include <array>
 
 #include "HTTPRequest.h"
 #include "HTTPResponse.h"
@@ -117,6 +118,35 @@ void* worker(void* _args) {
   return NULL;
 }
 
+/// FIFO connection buffer class
+class ConnBuf {
+  public:
+    ConnBuf(int max_buf_size) {
+      buf_size = max_buf_size;
+    }
+
+    bool is_full() {
+      return sockets.size() == buf_size;
+    }
+
+    void push(MySocket* socket) {
+      if (is_full())
+        throw invalid_argument("ConnBuf is full");
+      sockets.push(socket);
+    }
+
+    /// Return earliest socket inserted and pop it
+    MySocket* pop() {
+      MySocket* ret = sockets.front();
+      sockets.pop();
+      return ret;
+    }
+  private:
+    int buf_size;
+    queue<MySocket*> sockets;
+};
+
+
 int main(int argc, char *argv[]) {
 
   signal(SIGPIPE, SIG_IGN);
@@ -161,6 +191,7 @@ int main(int argc, char *argv[]) {
   // for path prefix matching
   services.push_back(new FileService(BASEDIR));
 
+  // Thread pooling
   unique_ptr<pthread_t[]> thread_pool(new pthread_t[THREAD_POOL_SIZE]);
   for (int i = 0; i < THREAD_POOL_SIZE; i++) {
     if (dthread_create(&thread_pool[i], NULL, &worker, NULL)) {
@@ -169,6 +200,9 @@ int main(int argc, char *argv[]) {
     }
     debug("main", "Created thread " + to_string(thread_pool[i]));
   }
+
+  // Buffer
+  ConnBuf conn_buf(BUFFER_SIZE);
 
   while(true) {
     sync_print("waiting_to_accept", "");

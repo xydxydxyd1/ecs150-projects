@@ -1,7 +1,7 @@
 # TODO
 
-- [ ] main: Thread pool
-    - [ ] Number of threads on argument `-t`
+- [X] main: Thread pool
+    - [X] Number of threads on argument `-t`
 - [ ] main: Accept connections into buffer
     - [ ] Buffer size on argument `-b`
     - [ ] Place socket/descriptor into buffer
@@ -27,3 +27,8 @@ MUTEX\_INITIALIZER, COND\_INITIALIZER
 ## Project structure
 
 Modification should be in `gunrock.cpp` and `FileService.cpp`
+
+## Buffer
+
+Buffer stores sockets. A circular queue with a head and tail indices should
+work.

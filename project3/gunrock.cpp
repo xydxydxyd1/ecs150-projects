@@ -25,9 +25,17 @@ using namespace std;
 int PORT = 8080;
 int THREAD_POOL_SIZE = 1;
 int BUFFER_SIZE = 1;
+bool DEBUG = false;
 string BASEDIR = "static";
 string SCHEDALG = "FIFO";
 string LOGFILE = "/dev/null";
+
+/// Debug print `msg`. Does not do anything if `DEBUG` is not set (by `-g` flag)
+void debug(string msg) {
+  if (!DEBUG)
+    return;
+  cout << msg << endl;
+}
 
 vector<HttpService *> services;
 
@@ -109,7 +117,7 @@ int main(int argc, char *argv[]) {
   signal(SIGPIPE, SIG_IGN);
   int option;
 
-  while ((option = getopt(argc, argv, "d:p:t:b:s:l:")) != -1) {
+  while ((option = getopt(argc, argv, "d:p:t:b:s:l:g")) != -1) {
     switch (option) {
     case 'd':
       BASEDIR = string(optarg);
@@ -129,6 +137,9 @@ int main(int argc, char *argv[]) {
     case 'l':
       LOGFILE = string(optarg);
       break;
+    case 'g':
+      DEBUG = true;
+      break;
     default:
       cerr<< "usage: " << argv[0] << " [-p port] [-t threads] [-b buffers]" << endl;
       exit(1);
@@ -147,8 +158,11 @@ int main(int argc, char *argv[]) {
   
   while(true) {
     sync_print("waiting_to_accept", "");
+    debug("waiting_to_accept");
     client = server->accept();
     sync_print("client_accepted", "");
+    debug("client_accepted");
+
     handle_request(client);
   }
 }

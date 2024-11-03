@@ -1,0 +1,4 @@
+#!/bin/zsh
+
+make
+./gunrock_web -g

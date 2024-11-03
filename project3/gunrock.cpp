@@ -113,20 +113,22 @@ void handle_request(MySocket *client) {
   delete client;
 }
 
-/// Start routine of a worker thread
-void* worker(void* _args) {
-  return NULL;
-}
-
 /// FIFO connection buffer class
 class ConnBuf {
   public:
+    ConnBuf() {}
     ConnBuf(int max_buf_size) {
       buf_size = max_buf_size;
     }
 
+    void set_bufsize(int max_buf_size) {
+      if (sockets.size() >= buf_size)
+        throw invalid_argument("max_buf_size is too small");
+      buf_size = max_buf_size;
+    }
+
     bool is_full() {
-      return sockets.size() == buf_size;
+      return sockets.size() >= buf_size;
     }
 
     void push(MySocket* socket) {
@@ -145,6 +147,13 @@ class ConnBuf {
     int buf_size;
     queue<MySocket*> sockets;
 };
+
+ConnBuf conn_buf;
+
+/// Start routine of a worker thread
+void* worker(void* _args) {
+  return NULL;
+}
 
 
 int main(int argc, char *argv[]) {
@@ -202,15 +211,20 @@ int main(int argc, char *argv[]) {
   }
 
   // Buffer
-  ConnBuf conn_buf(BUFFER_SIZE);
+  conn_buf.set_bufsize(BUFFER_SIZE);
 
   while(true) {
+    while (conn_buf.is_full()) {
+      // TODO: Add cond_var wait
+    }
+
     sync_print("waiting_to_accept", "");
     debug("main", "waiting_to_accept\n");
     client = server->accept();
     sync_print("client_accepted", "");
     debug("main", "client_accepted\n");
 
+    conn_buf.push(client);
     handle_request(client);
   }
 }

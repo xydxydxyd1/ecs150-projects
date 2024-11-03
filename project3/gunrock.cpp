@@ -31,6 +31,12 @@ string BASEDIR = "static";
 string SCHEDALG = "FIFO";
 string LOGFILE = "/dev/null";
 
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+/// Broadcasted when new connection enters buffer
+pthread_cond_t got_conn = PTHREAD_COND_INITIALIZER;
+/// Broadcasted when connection starts being handled
+pthread_cond_t handled_conn = PTHREAD_COND_INITIALIZER;
+
 /// Debug print `msg`. Does not do anything if `DEBUG` is not set (by `-g` flag)
 void debug(string src, string msg) {
   if (!DEBUG)
@@ -113,7 +119,9 @@ void handle_request(MySocket *client) {
   delete client;
 }
 
-/// FIFO connection buffer class
+/// FIFO connection buffer class.
+///
+/// Notably does not have multithread control
 class ConnBuf {
   public:
     ConnBuf() {}
@@ -128,17 +136,22 @@ class ConnBuf {
     }
 
     bool is_full() {
-      return sockets.size() >= buf_size;
+      bool ret = sockets.size() >= buf_size;
+      return ret;
     }
 
-    void push(MySocket* socket) {
+    bool is_empty() {
+      return sockets.empty();
+    }
+
+    void enqueue(MySocket* socket) {
       if (is_full())
         throw invalid_argument("ConnBuf is full");
       sockets.push(socket);
     }
 
     /// Return earliest socket inserted and pop it
-    MySocket* pop() {
+    MySocket* dequeue() {
       MySocket* ret = sockets.front();
       sockets.pop();
       return ret;
@@ -147,11 +160,23 @@ class ConnBuf {
     int buf_size;
     queue<MySocket*> sockets;
 };
-
 ConnBuf conn_buf;
 
 /// Start routine of a worker thread
 void* worker(void* _args) {
+  dthread_mutex_lock(&lock);
+  while (true) {
+    while (conn_buf.is_empty()) {
+      dthread_cond_wait(&got_conn, &lock);
+    }
+    MySocket* client = conn_buf.dequeue();
+    dthread_cond_broadcast(&handled_conn);
+
+    dthread_mutex_unlock(&lock);
+    handle_request(client);
+    dthread_mutex_lock(&lock);
+  }
+  dthread_mutex_unlock(&lock);
   return NULL;
 }
 
@@ -213,18 +238,22 @@ int main(int argc, char *argv[]) {
   // Buffer
   conn_buf.set_bufsize(BUFFER_SIZE);
 
+  dthread_mutex_lock(&lock);
   while(true) {
-    while (conn_buf.is_full()) {
-      // TODO: Add cond_var wait
-    }
-
+    dthread_mutex_unlock(&lock);
     sync_print("waiting_to_accept", "");
     debug("main", "waiting_to_accept\n");
     client = server->accept();
     sync_print("client_accepted", "");
     debug("main", "client_accepted\n");
+    dthread_mutex_lock(&lock);
 
-    conn_buf.push(client);
-    handle_request(client);
+    while (conn_buf.is_full()) {
+      dthread_cond_wait(&handled_conn, &lock);
+    }
+
+    conn_buf.enqueue(client);
+    dthread_cond_broadcast(&got_conn);
   }
+  dthread_mutex_unlock(&lock);
 }

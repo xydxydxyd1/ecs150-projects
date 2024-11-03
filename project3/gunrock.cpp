@@ -11,6 +11,8 @@
 #include <sstream>
 #include <queue>
 #include <array>
+#include <ctime>
+#include <iomanip>
 
 #include "HTTPRequest.h"
 #include "HTTPResponse.h"
@@ -41,6 +43,10 @@ pthread_cond_t handled_conn = PTHREAD_COND_INITIALIZER;
 void debug(string src, string msg) {
   if (!DEBUG)
     return;
+  
+  auto t = std::time(nullptr);
+  auto tm = *std::localtime(&t);
+  std::cout << std::put_time(&tm, "%H:%M:%S") << "\t";
   cout << src << ": " << msg << endl;
 }
 
@@ -166,10 +172,12 @@ ConnBuf conn_buf;
 void* worker(void* _args) {
   dthread_mutex_lock(&lock);
   while (true) {
+    debug("worker", "waiting for client");
     while (conn_buf.is_empty()) {
       dthread_cond_wait(&got_conn, &lock);
     }
     MySocket* client = conn_buf.dequeue();
+    debug("worker", "handling client " + to_string((long)client));
     dthread_cond_broadcast(&handled_conn);
 
     dthread_mutex_unlock(&lock);
@@ -242,16 +250,15 @@ int main(int argc, char *argv[]) {
   while(true) {
     dthread_mutex_unlock(&lock);
     sync_print("waiting_to_accept", "");
-    debug("main", "waiting_to_accept\n");
+    debug("main", "waiting to accept client");
     client = server->accept();
     sync_print("client_accepted", "");
-    debug("main", "client_accepted\n");
+    debug("main", "accepted client " + to_string((long)client));
     dthread_mutex_lock(&lock);
 
     while (conn_buf.is_full()) {
       dthread_cond_wait(&handled_conn, &lock);
     }
-
     conn_buf.enqueue(client);
     dthread_cond_broadcast(&got_conn);
   }

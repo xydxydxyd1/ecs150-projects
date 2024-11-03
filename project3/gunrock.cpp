@@ -130,7 +130,7 @@ class ConnBuf {
     }
 
     void set_bufsize(int max_buf_size) {
-      if (sockets.size() >= buf_size)
+      if (sockets.size() > buf_size)
         throw invalid_argument("max_buf_size is too small");
       buf_size = max_buf_size;
     }
@@ -157,7 +157,7 @@ class ConnBuf {
       return ret;
     }
   private:
-    int buf_size;
+    size_t buf_size;
     queue<MySocket*> sockets;
 };
 ConnBuf conn_buf;

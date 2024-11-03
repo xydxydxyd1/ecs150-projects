@@ -1,4 +1,4 @@
 #!/bin/zsh
 
 make
-./gunrock_web -g
+./gunrock_web -g -t 10

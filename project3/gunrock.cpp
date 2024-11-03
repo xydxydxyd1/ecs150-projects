@@ -31,10 +31,10 @@ string SCHEDALG = "FIFO";
 string LOGFILE = "/dev/null";
 
 /// Debug print `msg`. Does not do anything if `DEBUG` is not set (by `-g` flag)
-void debug(string msg) {
+void debug(string src, string msg) {
   if (!DEBUG)
     return;
-  cout << msg << endl;
+  cout << src << ": " << msg << endl;
 }
 
 vector<HttpService *> services;
@@ -112,6 +112,11 @@ void handle_request(MySocket *client) {
   delete client;
 }
 
+/// Start routine of a worker thread
+void* worker(void* _args) {
+  return NULL;
+}
+
 int main(int argc, char *argv[]) {
 
   signal(SIGPIPE, SIG_IGN);
@@ -155,13 +160,22 @@ int main(int argc, char *argv[]) {
   // The order that you push services dictates the search order
   // for path prefix matching
   services.push_back(new FileService(BASEDIR));
-  
+
+  unique_ptr<pthread_t[]> thread_pool(new pthread_t[THREAD_POOL_SIZE]);
+  for (int i = 0; i < THREAD_POOL_SIZE; i++) {
+    if (dthread_create(&thread_pool[i], NULL, &worker, NULL)) {
+      cerr << "failed to create thread" << endl;
+      return 1;
+    }
+    debug("main", "Created thread " + to_string(thread_pool[i]));
+  }
+
   while(true) {
     sync_print("waiting_to_accept", "");
-    debug("waiting_to_accept");
+    debug("main", "waiting_to_accept\n");
     client = server->accept();
     sync_print("client_accepted", "");
-    debug("client_accepted");
+    debug("main", "client_accepted\n");
 
     handle_request(client);
   }

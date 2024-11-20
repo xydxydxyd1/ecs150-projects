@@ -34,7 +34,10 @@ bool FileService::endswith(string str, string suffix) {
 }
 
 void FileService::get(HTTPRequest *request, HTTPResponse *response) {
-  string path = this->m_basedir + request->getPath();
+  string req_path = request->getPath();
+  if (req_path.find("..") != req_path.npos)
+    throw invalid_argument("request path is illegal");
+  string path = this->m_basedir + req_path;
   string fileContents = this->readFile(path);
   if (fileContents.size() == 0) {
     response->setStatus(403);

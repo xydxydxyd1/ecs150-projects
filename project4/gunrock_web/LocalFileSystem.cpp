@@ -2,19 +2,21 @@
 #include <string>
 #include <vector>
 #include <assert.h>
+#include <cstring>
 
 #include "LocalFileSystem.h"
 #include "ufs.h"
 
 using namespace std;
 
-
 LocalFileSystem::LocalFileSystem(Disk *disk) {
   this->disk = disk;
 }
 
 void LocalFileSystem::readSuperBlock(super_t *super) {
-
+    char buf[UFS_BLOCK_SIZE];
+    disk->readBlock(0, (void*)buf);
+    memcpy((void*)super, (void*)buf, sizeof(super_t));
 }
 
 void LocalFileSystem::readInodeBitmap(super_t *super, unsigned char *inodeBitmap) {

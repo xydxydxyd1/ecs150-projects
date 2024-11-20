@@ -1,7 +1,6 @@
 CompileFlags:
     Add: [
         -g,
-        -Werror,
         -Wall,
         -I, include,
         -I, shared/include,

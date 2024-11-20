@@ -27,11 +27,17 @@ int main(int argc, char *argv[]) {
   }
 
   // parse command line arguments
-  /*
   Disk *disk = new Disk(argv[1], UFS_BLOCK_SIZE);
   LocalFileSystem *fileSystem = new LocalFileSystem(disk);
+  /*
   string directory = string(argv[2]);
   */
-  
+
+  super_t *super = new super_t;
+  fileSystem->readSuperBlock(super);
+
+  delete disk;
+  delete fileSystem;
+  delete super;
   return 0;
 }

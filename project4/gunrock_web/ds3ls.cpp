@@ -28,19 +28,17 @@ int main(int argc, char *argv[]) {
   }
 
   // parse command line arguments
-  Disk *disk = new Disk(argv[1], UFS_BLOCK_SIZE);
-  LocalFileSystem *fileSystem = new LocalFileSystem(disk);
+  unique_ptr<Disk> disk(new Disk(argv[1], UFS_BLOCK_SIZE));
+  unique_ptr<LocalFileSystem> fileSystem(new LocalFileSystem(disk.get()));
   /*
   string directory = string(argv[2]);
   */
 
-  dir_ent_t root_dir[2];
+  dir_ent_t root_dir[UFS_BLOCK_SIZE / sizeof(dir_ent_t)];
   int ret = fileSystem->read(0, root_dir, 2*32);
   cout << "Ret: " << ret << endl;
   cout << "Type: " << root_dir[1].inum << endl;
   cout << "Name: " << root_dir[1].name << endl;
 
-  delete disk;
-  delete fileSystem;
   return 0;
 }

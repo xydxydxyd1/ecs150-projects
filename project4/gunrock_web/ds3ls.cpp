@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
+#include <memory>
 
 #include "StringUtils.h"
 #include "LocalFileSystem.h"
@@ -33,11 +34,13 @@ int main(int argc, char *argv[]) {
   string directory = string(argv[2]);
   */
 
-  super_t *super = new super_t;
-  fileSystem->readSuperBlock(super);
+  unique_ptr<inode_t> root_dir(new inode_t);
+  int ret = fileSystem->stat(0, root_dir.get());
+  cout << "Ret: " << ret << endl;
+  cout << "Type: " << root_dir->type << endl;
+  cout << "Size: " << root_dir->size << endl;
 
   delete disk;
   delete fileSystem;
-  delete super;
   return 0;
 }

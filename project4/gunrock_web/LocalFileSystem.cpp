@@ -1,57 +1,74 @@
+#include "LocalFileSystem.h"
+
+#include <assert.h>
+
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <assert.h>
-#include <cstring>
+#include <memory>
 
-#include "LocalFileSystem.h"
 #include "ufs.h"
 
 using namespace std;
 
-LocalFileSystem::LocalFileSystem(Disk *disk) {
-  this->disk = disk;
-}
+LocalFileSystem::LocalFileSystem(Disk *disk) { this->disk = disk; }
 
 void LocalFileSystem::readSuperBlock(super_t *super) {
-    char buf[UFS_BLOCK_SIZE];
-    disk->readBlock(0, (void*)buf);
-    memcpy((void*)super, (void*)buf, sizeof(super_t));
+  char buf[UFS_BLOCK_SIZE];
+  disk->readBlock(0, buf);
+  memcpy(super, buf, sizeof(super_t));
 }
 
-void LocalFileSystem::readInodeBitmap(super_t *super, unsigned char *inodeBitmap) {
+void LocalFileSystem::readInodeBitmap(super_t *super,
+                                      unsigned char *inodeBitmap) {}
 
-}
+void LocalFileSystem::writeInodeBitmap(super_t *super,
+                                       unsigned char *inodeBitmap) {}
 
-void LocalFileSystem::writeInodeBitmap(super_t *super, unsigned char *inodeBitmap) {
+void LocalFileSystem::readDataBitmap(super_t *super,
+                                     unsigned char *dataBitmap) {}
 
-}
-
-void LocalFileSystem::readDataBitmap(super_t *super, unsigned char *dataBitmap) {
-
-}
-
-void LocalFileSystem::writeDataBitmap(super_t *super, unsigned char *dataBitmap) {
-
-}
+void LocalFileSystem::writeDataBitmap(super_t *super,
+                                      unsigned char *dataBitmap) {}
 
 void LocalFileSystem::readInodeRegion(super_t *super, inode_t *inodes) {
-
+  char blk_buf[UFS_BLOCK_SIZE];
+  int write_i = 0;
+  for (int read_blk_i = 0; read_blk_i < super->inode_region_len; read_blk_i++) {
+    disk->readBlock(super->inode_region_addr + read_blk_i, blk_buf);
+    int read_i = 0;
+    while (write_i < super->num_inodes &&
+           read_i * sizeof(char) + sizeof(inode_t) <
+               UFS_BLOCK_SIZE * sizeof(char)) {
+      memcpy(&inodes[write_i], &blk_buf[read_i], sizeof(inode_t));
+      write_i++;
+      read_i++;
+    }
+  }
 }
 
-void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {
+void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {}
 
-}
-
-int LocalFileSystem::lookup(int parentInodeNumber, string name) {
-  return 0;
-}
+int LocalFileSystem::lookup(int parentInodeNumber, string name) { return 0; }
 
 int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
+  unique_ptr<super_t> super(new super_t);
+  readSuperBlock(super.get());
+
+  if (inodeNumber >= super->num_inodes) {
+    return EINVALIDINODE;
+  }
+
+  unique_ptr<inode_t[]> inode_region(new inode_t[super->num_inodes]);
+  readInodeRegion(super.get(), inode_region.get());
+  memcpy(inode, &inode_region[inodeNumber], sizeof(inode_t));
   return 0;
 }
 
 int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
+  unique_ptr<inode_t> inode(new inode_t);
+  stat(inodeNumber, inode.get());
   return 0;
 }
 
@@ -63,7 +80,4 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   return 0;
 }
 
-int LocalFileSystem::unlink(int parentInodeNumber, string name) {
-  return 0;
-}
-
+int LocalFileSystem::unlink(int parentInodeNumber, string name) { return 0; }

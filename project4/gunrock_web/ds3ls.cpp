@@ -34,11 +34,11 @@ int main(int argc, char *argv[]) {
   string directory = string(argv[2]);
   */
 
-  unique_ptr<inode_t> root_dir(new inode_t);
-  int ret = fileSystem->stat(0, root_dir.get());
+  dir_ent_t root_dir[2];
+  int ret = fileSystem->read(0, root_dir, 2*32);
   cout << "Ret: " << ret << endl;
-  cout << "Type: " << root_dir->type << endl;
-  cout << "Size: " << root_dir->size << endl;
+  cout << "Type: " << root_dir[1].inum << endl;
+  cout << "Name: " << root_dir[1].name << endl;
 
   delete disk;
   delete fileSystem;

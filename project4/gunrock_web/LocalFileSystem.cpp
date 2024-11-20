@@ -56,6 +56,7 @@ int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
   unique_ptr<super_t> super(new super_t);
   readSuperBlock(super.get());
 
+  /* TODO: Check bitmap <19-11-24, Eric Xu> */
   if (inodeNumber >= super->num_inodes) {
     return EINVALIDINODE;
   }
@@ -68,7 +69,21 @@ int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
 
 int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
   unique_ptr<inode_t> inode(new inode_t);
-  stat(inodeNumber, inode.get());
+  int ret = stat(inodeNumber, inode.get());
+  if (ret != 0)
+    return EINVALIDINODE;
+  if (inode->size < size)
+    return EINVALIDSIZE;
+
+  char read_blk[UFS_BLOCK_SIZE];
+  for (auto direct_ptr : inode->direct) {
+    if (size == 0)
+      break;
+    disk->readBlock(direct_ptr, read_blk);
+    int read_amt = size > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : size;
+    size -= read_amt;
+    memcpy(buffer, read_blk, read_amt);
+  }
   return 0;
 }
 

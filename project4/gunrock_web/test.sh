@@ -18,4 +18,4 @@ make
 ./mkfs -f test.img -d 32 -i 32
 echo
 echo "ds3ls"
-./ds3ls test.img /a/b
+./ds3ls test.img /

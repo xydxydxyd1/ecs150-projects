@@ -95,7 +95,7 @@ int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
   unique_ptr<super_t> super(new super_t);
   readSuperBlock(super.get());
   unique_ptr<unsigned char[]> inode_bitmap(
-      new unsigned char[super->inode_region_len * UFS_BLOCK_SIZE]);
+      new unsigned char[super->inode_bitmap_len * UFS_BLOCK_SIZE]);
   readInodeBitmap(super.get(), inode_bitmap.get());
 
   if (inodeNumber >= super->num_inodes

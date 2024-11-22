@@ -328,7 +328,7 @@ out.
 
 Calling `ds3cat` on a directory is an error. For all errors print the
 string `Error reading file" to standard error and set your processes
-return code to 1.
+return code to 1.`
 
 ### The `ds3bits` utility
 

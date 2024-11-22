@@ -17,5 +17,15 @@ make
 
 ./mkfs -f test.img -d 32 -i 32
 echo
-echo "ds3ls"
-./ds3ls test.img /
+
+for (( i = 0; i <= 13; i++ )); do
+    echo "RUNNING TEST $i"
+    sh "tests/$i.run" > temp.out
+    diff temp.out "tests/$i.out"
+    echo
+done
+
+#echo "ds3ls"
+#./ds3ls test.img /
+#echo "ds3bits"
+#./ds3bits test.img

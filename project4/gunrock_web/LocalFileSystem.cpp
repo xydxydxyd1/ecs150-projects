@@ -18,7 +18,7 @@ using namespace std;
 /// Errors are thrown at the Disk level
 void read_bytes(Disk *disk, int addr, int len, char* dest) {
   char buf[UFS_BLOCK_SIZE];
-  int write_i = 0;
+  int write_offset = 0;
   int unread_len = len;
   int blk_num = addr / UFS_BLOCK_SIZE;
   const int offset = addr % UFS_BLOCK_SIZE;
@@ -31,23 +31,21 @@ void read_bytes(Disk *disk, int addr, int len, char* dest) {
 
   blk_num++;
   unread_len -= read_amt;
-  write_i += read_amt;
+  write_offset += read_amt;
   while (unread_len > 0) {
     read_amt = unread_len > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : unread_len;
     disk->readBlock(blk_num, buf);
-    memcpy(dest + write_i, buf, read_amt);
+    memcpy(dest + write_offset, buf, read_amt);
     blk_num++;
     unread_len -= read_amt;
-    write_i += read_amt;
+    write_offset += read_amt;
   }
 }
 
 LocalFileSystem::LocalFileSystem(Disk *disk) { this->disk = disk; }
 
 void LocalFileSystem::readSuperBlock(super_t *super) {
-  char buf[UFS_BLOCK_SIZE];
-  disk->readBlock(0, buf);
-  memcpy(super, buf, sizeof(super_t));
+  read_bytes(disk, 0, sizeof(super_t), (char*)super);
 }
 
 void LocalFileSystem::readInodeBitmap(super_t *super,
@@ -100,13 +98,17 @@ int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
     return EINVALIDSIZE;
 
   char read_blk[UFS_BLOCK_SIZE];
+  int write_offset = 0;
+  int unread_len = size;
   for (auto direct_ptr : inode->direct) {
-    if (size == 0)
+    if (unread_len == 0)
       break;
     disk->readBlock(direct_ptr, read_blk);
-    int read_amt = size > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : size;
-    size -= read_amt;
-    memcpy(buffer, read_blk, read_amt);
+    int read_amt = unread_len > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : unread_len;
+    memcpy((char*)buffer + write_offset, read_blk, read_amt);
+
+    unread_len -= read_amt;
+    write_offset += read_amt;
   }
   return 0;
 }

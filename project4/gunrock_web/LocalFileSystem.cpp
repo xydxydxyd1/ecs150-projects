@@ -42,6 +42,14 @@ void read_bytes(Disk *disk, int addr, int len, char* dest) {
   }
 }
 
+/// Check to see if the bit `index` corresponds to on `bitmap` is set. Returns
+/// true if set, false if otherwise. Assume `index` is valid in `bitmap`
+bool check_bitmap(const unsigned char* bitmap, int index) {
+  const int offset = index % sizeof(unsigned char);
+  const int bitmap_index = index / sizeof(unsigned char);
+  return (bitmap[bitmap_index] & (1 << offset)) != 0;
+}
+
 LocalFileSystem::LocalFileSystem(Disk *disk) { this->disk = disk; }
 
 void LocalFileSystem::readSuperBlock(super_t *super) {
@@ -50,13 +58,22 @@ void LocalFileSystem::readSuperBlock(super_t *super) {
 
 void LocalFileSystem::readInodeBitmap(super_t *super,
                                       unsigned char *inodeBitmap) {
+  read_bytes(disk,
+      super->inode_bitmap_addr * UFS_BLOCK_SIZE,
+      super->inode_bitmap_len * UFS_BLOCK_SIZE,
+      (char*)inodeBitmap);
 }
 
 void LocalFileSystem::writeInodeBitmap(super_t *super,
                                        unsigned char *inodeBitmap) {}
 
 void LocalFileSystem::readDataBitmap(super_t *super,
-                                     unsigned char *dataBitmap) {}
+                                     unsigned char *dataBitmap) {
+  read_bytes(disk,
+      super->data_bitmap_addr * UFS_BLOCK_SIZE,
+      super->data_bitmap_len * UFS_BLOCK_SIZE,
+      (char*)dataBitmap);
+}
 
 void LocalFileSystem::writeDataBitmap(super_t *super,
                                       unsigned char *dataBitmap) {}
@@ -77,9 +94,12 @@ int LocalFileSystem::lookup(int parentInodeNumber, string name) {
 int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
   unique_ptr<super_t> super(new super_t);
   readSuperBlock(super.get());
+  unique_ptr<unsigned char[]> inode_bitmap(
+      new unsigned char[super->inode_region_len * UFS_BLOCK_SIZE]);
+  readInodeBitmap(super.get(), inode_bitmap.get());
 
-  /* TODO: Check bitmap <19-11-24, Eric Xu> */
-  if (inodeNumber >= super->num_inodes) {
+  if (inodeNumber >= super->num_inodes
+      || !check_bitmap(inode_bitmap.get(), inodeNumber)) {
     return EINVALIDINODE;
   }
 

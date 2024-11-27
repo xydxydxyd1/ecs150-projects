@@ -117,16 +117,13 @@ int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
   if (inode->size < size)
     return -EINVALIDSIZE;
 
-  char read_blk[UFS_BLOCK_SIZE];
   int write_offset = 0;
   int unread_len = size;
   for (auto direct_ptr : inode->direct) {
     if (unread_len == 0)
       break;
-    disk->readBlock(direct_ptr, read_blk);
     int read_amt = unread_len > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : unread_len;
-    memcpy((char*)buffer + write_offset, read_blk, read_amt);
-
+    read_bytes(disk, direct_ptr * UFS_BLOCK_SIZE, read_amt, (char*)buffer + write_offset);
     unread_len -= read_amt;
     write_offset += read_amt;
   }

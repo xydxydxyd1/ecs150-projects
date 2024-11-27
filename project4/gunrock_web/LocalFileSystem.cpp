@@ -100,7 +100,7 @@ int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
 
   if (inodeNumber >= super->num_inodes
       || !check_bitmap(inode_bitmap.get(), inodeNumber)) {
-    return EINVALIDINODE;
+    return -EINVALIDINODE;
   }
 
   unique_ptr<inode_t[]> inode_region(new inode_t[super->num_inodes]);
@@ -113,9 +113,9 @@ int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
   unique_ptr<inode_t> inode(new inode_t);
   int ret = stat(inodeNumber, inode.get());
   if (ret != 0)
-    return EINVALIDINODE;
+    return -EINVALIDINODE;
   if (inode->size < size)
-    return EINVALIDSIZE;
+    return -EINVALIDSIZE;
 
   char read_blk[UFS_BLOCK_SIZE];
   int write_offset = 0;

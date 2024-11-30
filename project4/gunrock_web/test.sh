@@ -21,7 +21,10 @@ echo
 #img="test.img"
 img="./tests/disk_images/a.img"
 
-echo "ds3ls"
-./ds3ls "$img" /a/d
+#echo "ds3ls"
+#./ds3ls "$img" /a/d
 #echo "ds3bits"
 #./ds3bits test.img
+
+echo "ds3bit"
+./ds3bits tests/disk_images/a.img

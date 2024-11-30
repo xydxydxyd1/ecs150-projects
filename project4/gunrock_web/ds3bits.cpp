@@ -45,6 +45,7 @@ int main(int argc, char *argv[]) {
     cout  << (int)inode_bitmap[i] << " ";
   }
   cout << endl;
+  cout << endl;
 
   cout << "Data bitmap" << endl;
   for (int i = 0; i < super->num_data / 8; i++) {

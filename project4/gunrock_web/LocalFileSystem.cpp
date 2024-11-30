@@ -45,8 +45,9 @@ void read_bytes(Disk *disk, int addr, int len, char* dest) {
 /// Check to see if the bit `index` corresponds to on `bitmap` is set. Returns
 /// true if set, false if otherwise. Assume `index` is valid in `bitmap`
 bool check_bitmap(const unsigned char* bitmap, int index) {
-  const int offset = index % sizeof(unsigned char);
-  const int bitmap_index = index / sizeof(unsigned char);
+  const int size_in_bits = sizeof(unsigned char) * 8;
+  const int offset = index % size_in_bits;
+  const int bitmap_index = index / size_in_bits;
   return (bitmap[bitmap_index] & (1 << offset)) != 0;
 }
 
@@ -88,7 +89,21 @@ void LocalFileSystem::readInodeRegion(super_t *super, inode_t *inodes) {
 void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {}
 
 int LocalFileSystem::lookup(int parentInodeNumber, string name) {
-  return 0;
+  inode_t inode;
+  if (stat(parentInodeNumber, &inode))
+    return -EINVALIDINODE;
+  if (inode.type != UFS_DIRECTORY)
+    return -EINVALIDINODE;
+  vector<dir_ent_t> dir;
+  dir.resize(inode.size / sizeof(dir_ent_t));
+  if (read(parentInodeNumber, dir.data(), inode.size))
+    return -EINVALIDINODE;
+
+  for (dir_ent_t entry : dir) {
+    if (entry.name == name)
+      return entry.inum;
+  }
+  return -ENOTFOUND;
 }
 
 int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {

@@ -33,14 +33,10 @@ void sort_and_print(vector<dir_ent_t>& dirs) {
   }
 }
 
-/// Resolve `path` to either a directory or a file. If a directory, returns a
-/// vector that contains all directory entries in that directory. If a file,
-/// returns a vector with length 1 that contains the directory entry
-/// corresponding to the file.
+/// Resolve `path` to a directory entry
 ///
 /// If an error occurs, throws invalid_argument
-vector<dir_ent_t> resolve_path(LocalFileSystem& fs, string path) {
-  vector<dir_ent_t> out;
+dir_ent_t resolve_path(LocalFileSystem& fs, string path) {
   if (path[0] != '/') {
     throw invalid_argument("path must be absolute (start with '/')");
   }
@@ -66,17 +62,30 @@ vector<dir_ent_t> resolve_path(LocalFileSystem& fs, string path) {
   inode_t inode;
   if (fs.stat(curr_i_num, &inode))
     throw invalid_argument("found file but is invalid");
+  if (inode.type == UFS_REGULAR_FILE && has_trailing_delim)
+    throw invalid_argument("regular file cannot have trailing '/'");
+  dir_ent_t out;
+  out.inum = curr_i_num;
+  strcpy(out.name, child_name.c_str());
+  return out;
+}
+
+/// Read a directory entry. If it is a directory, return all files inside the
+/// directory. If it is a regular file, return a vector of size 1 containing
+/// only `dir_ent`
+///
+/// Throws `invalid_argument` if error occurs
+vector<dir_ent_t> read_entry(LocalFileSystem& fs, dir_ent_t dir_ent) {
+  inode_t inode;
+  if (fs.stat(dir_ent.inum, &inode))
+    throw invalid_argument("file is invalid");
+  vector<dir_ent_t> out;
   if (inode.type == UFS_DIRECTORY) {
     out.resize(inode.size / sizeof(dir_ent_t));
-    if (fs.read(curr_i_num, out.data(), inode.size))
+    if (fs.read(dir_ent.inum, out.data(), inode.size))
       throw invalid_argument("found file but can't read");
   } else if (inode.type == UFS_REGULAR_FILE) {
-    if (has_trailing_delim)
-      throw invalid_argument("regular file cannot have trailing '/'");
-    dir_ent_t entry;
-    strcpy(entry.name, child_name.c_str());
-    entry.inum = curr_i_num;
-    out.push_back(entry);
+    out.push_back(dir_ent);
   }
   return out;
 }
@@ -99,7 +108,8 @@ int main(int argc, char* argv[]) {
   if (fileSystem.stat(curr_inode_num, &curr_inode)) err();
   vector<dir_ent_t> dir_ents;
   try {
-    dir_ents = resolve_path(fileSystem, directory);
+    dir_ent_t entry = resolve_path(fileSystem, directory);
+    dir_ents = read_entry(fileSystem, entry);
   } catch (invalid_argument& e) {
     err();
   }

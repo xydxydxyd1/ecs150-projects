@@ -26,5 +26,10 @@ img="./tests/disk_images/a.img"
 #echo "ds3bits"
 #./ds3bits test.img
 
-echo "ds3bit"
-./ds3bits tests/disk_images/a.img
+#echo "ds3bit"
+#./ds3bits tests/disk_images/a.img
+
+echo "ds3cat"
+#./ds3cat tests/disk_images/big_directory.img 10
+./ds3ls tests/disk_images/big_directory.img /09
+

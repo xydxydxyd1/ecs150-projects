@@ -44,7 +44,7 @@ void read_bytes(Disk *disk, int addr, int len, char* dest) {
 
 /// Check to see if the bit `index` corresponds to on `bitmap` is set. Returns
 /// true if set, false if otherwise. Assume `index` is valid in `bitmap`
-bool check_bitmap(const unsigned char* bitmap, int index) {
+bool is_allocated(const unsigned char* bitmap, int index) {
   const int size_in_bits = sizeof(unsigned char) * 8;
   const int offset = index % size_in_bits;
   const int bitmap_index = index / size_in_bits;
@@ -114,7 +114,7 @@ int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
   readInodeBitmap(super.get(), inode_bitmap.get());
 
   if (inodeNumber >= super->num_inodes
-      || !check_bitmap(inode_bitmap.get(), inodeNumber)) {
+      || !is_allocated(inode_bitmap.get(), inodeNumber)) {
     return -EINVALIDINODE;
   }
 

@@ -11,8 +11,11 @@ DSUTIL_OBJS = Disk.o LocalFileSystem.o StringUtils.o
 
 -include $(OBJS:.o=.d)
 
-gunrock_web: $(OBJS)
+gunrock_web: $(OBJS) submitted.zip
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS)
+
+submitted.zip: LocalFileSystem.cpp DistributedFileSystemService.cpp ds3bits.cpp ds3cat.cpp ds3cp.cpp ds3ls.cpp ds3mkdir.cpp ds3rm.cpp ds3touch.cpp
+	zip submitted.zip LocalFileSystem.cpp DistributedFileSystemService.cpp ds3bits.cpp ds3cat.cpp ds3cp.cpp ds3ls.cpp ds3mkdir.cpp ds3rm.cpp ds3touch.cpp
 
 mkfs: mkfs.o
 	gcc -o $@ $(CFLAGS) mkfs.o

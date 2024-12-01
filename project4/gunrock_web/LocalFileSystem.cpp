@@ -107,34 +107,34 @@ int LocalFileSystem::lookup(int parentInodeNumber, string name) {
 }
 
 int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
-  unique_ptr<super_t> super(new super_t);
-  readSuperBlock(super.get());
+  super_t super;
+  readSuperBlock(&super);
   unique_ptr<unsigned char[]> inode_bitmap(
-      new unsigned char[super->inode_bitmap_len * UFS_BLOCK_SIZE]);
-  readInodeBitmap(super.get(), inode_bitmap.get());
+      new unsigned char[super.inode_bitmap_len * UFS_BLOCK_SIZE]);
+  readInodeBitmap(&super, inode_bitmap.get());
 
-  if (inodeNumber >= super->num_inodes
+  if (inodeNumber >= super.num_inodes
       || !is_allocated(inode_bitmap.get(), inodeNumber)) {
     return -EINVALIDINODE;
   }
 
-  unique_ptr<inode_t[]> inode_region(new inode_t[super->num_inodes]);
-  readInodeRegion(super.get(), inode_region.get());
+  unique_ptr<inode_t[]> inode_region(new inode_t[super.num_inodes]);
+  readInodeRegion(&super, inode_region.get());
   memcpy(inode, &inode_region[inodeNumber], sizeof(inode_t));
   return 0;
 }
 
 int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
-  unique_ptr<inode_t> inode(new inode_t);
-  int ret = stat(inodeNumber, inode.get());
+  inode_t inode;
+  int ret = stat(inodeNumber, &inode);
   if (ret != 0)
     return -EINVALIDINODE;
-  if (inode->size < size)
+  if (inode.size < size)
     return -EINVALIDSIZE;
 
   int write_offset = 0;
   int unread_len = size;
-  for (auto direct_ptr : inode->direct) {
+  for (auto direct_ptr : inode.direct) {
     if (unread_len == 0)
       break;
     int read_amt = unread_len > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : unread_len;

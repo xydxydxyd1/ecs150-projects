@@ -16,7 +16,7 @@ using namespace std;
 /// `addr`
 ///
 /// Errors are thrown at the Disk level
-void read_bytes(Disk *disk, int addr, int len, char* dest) {
+void read_bytes(Disk *disk, int addr, int len, void* dest) {
   char buf[UFS_BLOCK_SIZE];
   int write_offset = 0;
   int unread_len = len;
@@ -35,10 +35,41 @@ void read_bytes(Disk *disk, int addr, int len, char* dest) {
   while (unread_len > 0) {
     read_amt = unread_len > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : unread_len;
     disk->readBlock(blk_num, buf);
-    memcpy(dest + write_offset, buf, read_amt);
+    memcpy((char*)dest + write_offset, buf, read_amt);
     blk_num++;
     unread_len -= read_amt;
     write_offset += read_amt;
+  }
+}
+
+/// Write `len` bytes from `src` into `disk`, starting from byte address
+/// `addr`.
+///
+/// Does not start or stop transaction. Errors are thrown at the Disk level
+void write_bytes(Disk *disk, int addr, int len, void* src) {
+  char buf[UFS_BLOCK_SIZE];
+  int write_offset = 0;
+  int unwritten_len = len;
+  int blk_num = addr / UFS_BLOCK_SIZE;
+  const int offset = addr % UFS_BLOCK_SIZE;
+
+  // Initial write has offset
+  int write_amt = UFS_BLOCK_SIZE - offset;
+  write_amt = unwritten_len > write_amt ? write_amt : unwritten_len;
+  disk->readBlock(blk_num, buf);
+  memcpy(buf + offset, src, write_amt);
+  disk->writeBlock(blk_num, buf);
+
+  blk_num++;
+  unwritten_len -= write_amt;
+  write_offset += write_amt;
+  while (unwritten_len > 0) {
+    write_amt = unwritten_len > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : unwritten_len;
+    disk->readBlock(blk_num, buf);
+    memcpy(buf, (char*)src + write_offset, write_amt);
+    blk_num++;
+    unwritten_len -= write_amt;
+    write_offset += write_amt;
   }
 }
 
@@ -66,7 +97,12 @@ void LocalFileSystem::readInodeBitmap(super_t *super,
 }
 
 void LocalFileSystem::writeInodeBitmap(super_t *super,
-                                       unsigned char *inodeBitmap) {}
+                                       unsigned char *inodeBitmap) {
+  write_bytes(disk,
+      super->inode_bitmap_addr * UFS_BLOCK_SIZE,
+      super->inode_bitmap_len * UFS_BLOCK_SIZE,
+      (char*)inodeBitmap);
+}
 
 void LocalFileSystem::readDataBitmap(super_t *super,
                                      unsigned char *dataBitmap) {
@@ -77,7 +113,12 @@ void LocalFileSystem::readDataBitmap(super_t *super,
 }
 
 void LocalFileSystem::writeDataBitmap(super_t *super,
-                                      unsigned char *dataBitmap) {}
+                                      unsigned char *dataBitmap) {
+  write_bytes(disk,
+      super->data_bitmap_addr * UFS_BLOCK_SIZE,
+      super->data_bitmap_len * UFS_BLOCK_SIZE,
+      (char*)dataBitmap);
+}
 
 void LocalFileSystem::readInodeRegion(super_t *super, inode_t *inodes) {
   read_bytes(disk,
@@ -86,7 +127,12 @@ void LocalFileSystem::readInodeRegion(super_t *super, inode_t *inodes) {
       (char*)inodes);
 }
 
-void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {}
+void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {
+  write_bytes(disk,
+      super->inode_region_addr * UFS_BLOCK_SIZE,
+      super->inode_region_len * UFS_BLOCK_SIZE,
+      (char*)inodes);
+}
 
 int LocalFileSystem::lookup(int parentInodeNumber, string name) {
   inode_t inode;

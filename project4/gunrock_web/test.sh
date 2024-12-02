@@ -19,17 +19,16 @@ make
 echo
 
 #img="test.img"
-img="./tests/disk_images/a.img"
+#img="./tests/disk_images/a.img"
+img="./tests/disk_images/big_directory.img"
 
 #echo "ds3ls"
-#./ds3ls "$img" /a/d
+#./ds3ls "$img" /
 #echo "ds3bits"
 #./ds3bits test.img
 
 #echo "ds3bit"
 #./ds3bits tests/disk_images/a.img
 
-echo "ds3cat"
-#./ds3cat tests/disk_images/big_directory.img 10
-./ds3ls tests/disk_images/big_directory.img /09
-
+#echo "ds3cat"
+./ds3cat "$img" 51

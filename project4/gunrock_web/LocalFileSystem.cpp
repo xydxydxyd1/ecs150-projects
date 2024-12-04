@@ -192,7 +192,57 @@ int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
 }
 
 int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
-  return 0;
+  inode_t parent;
+  if (stat(parentInodeNumber, &parent))
+    return -EINVALIDINODE;
+  if (parent.type != UFS_DIRECTORY)
+    return -EINVALIDTYPE;
+  if (name.size() >= DIR_ENT_NAME_SIZE)
+    return -EINVALIDNAME;
+
+  int child_inum = lookup(parentInodeNumber, name);
+  if (child_inum >= 0) {
+    inode_t child;
+    if (stat(child_inum, &child)) return -EINVALIDINODE;
+    if (child.type == type)
+      return child_inum;
+    else 
+      return -EINVALIDINODE;
+  }
+  else if (child_inum != -ENOTFOUND)
+    return -EINVALIDINODE;
+
+  super_t super;
+  readSuperBlock(&super);
+  unique_ptr<unsigned char[]> inode_bitmap(
+      new unsigned char[UFS_BLOCK_SIZE * super.inode_bitmap_len]);
+  readInodeBitmap(&super, inode_bitmap.get());
+
+  int inum;
+  char byte_buf;
+  char mask;
+  for (inum = 0; inum < super.num_inodes; inum++) {
+    byte_buf = inode_bitmap[inum/8];
+    mask = 1 << inum % 8;
+    if ((byte_buf & mask) == 0) {
+      break;
+    }
+  }
+  if (inum >= super.num_inodes)
+    return -ENOTENOUGHSPACE;
+
+  inode_bitmap[inum/8] = byte_buf | mask;
+
+  inode_t new_file;
+  new_file.size = 0;
+  new_file.type = type;
+
+  unique_ptr<inode_t[]> inode_region(
+      new inode_t[UFS_BLOCK_SIZE * super.inode_region_len]);
+  readInodeRegion(&super, inode_region.get());
+  inode_region[inum] = new_file;
+  writeInodeRegion(&super, inode_region.get());
+  return inum;
 }
 
 int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {

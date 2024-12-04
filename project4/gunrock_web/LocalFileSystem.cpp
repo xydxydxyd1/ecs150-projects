@@ -90,7 +90,7 @@ bool is_allocated(const unsigned char* bitmap, int index) {
 LocalFileSystem::LocalFileSystem(Disk *disk) { this->disk = disk; }
 
 void LocalFileSystem::readSuperBlock(super_t *super) {
-  read_bytes(disk, 0, sizeof(super_t), (char*)super);
+  read_bytes(disk, 0, sizeof(super_t), super);
 }
 
 void LocalFileSystem::readInodeBitmap(super_t *super,
@@ -276,16 +276,13 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   readSuperBlock(&super);
   inode_t inode;
   if (stat(inodeNumber, &inode)) {
-    disk->rollback();
     return -EINVALIDINODE;
   }
-  inode.size = size;
 
   // Allocate and free space
   const int old_nblks = bytes_to_blks(inode.size);
   const int new_nblks = bytes_to_blks(size);
   if (new_nblks > DIRECT_PTRS) {
-    disk->rollback();
     return -ENOTENOUGHSPACE;
   }
   if (old_nblks < new_nblks) {
@@ -298,7 +295,6 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
         blknum++;
         // bitmap is always larger than data region, no need for bound checks
         if ((blknum + 1) > super.data_region_len) {
-          disk->rollback();
           return -ENOTENOUGHSPACE;
         }
       }
@@ -332,6 +328,7 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   }
 
   // Write inode
+  inode.size = size;
   unique_ptr<inode_t[]> inode_region(
       new inode_t[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)]);
   readInodeRegion(&super, inode_region.get());

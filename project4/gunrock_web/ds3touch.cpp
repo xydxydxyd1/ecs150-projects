@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
   string fileName = string(argv[3]);
 
   if (fileSystem.create(parentInode, UFS_REGULAR_FILE, fileName) < 0) {
-    cerr << "Error creating directory" << endl;
+    cerr << "Error creating file" << endl;
     return 1;
   }
   

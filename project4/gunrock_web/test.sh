@@ -37,7 +37,12 @@ img="temp.img"
 #echo "ds3cat"
 #./ds3cat "$img" 51
 
-echo "ds3mkdir"
+echo "ds3touch and create"
 ./ds3ls "$img" /
 ./ds3mkdir "$img" 0 b
-./ds3ls "$img" /
+./ds3ls "$img" /b
+./ds3mkdir "$img" 4 c
+./ds3ls "$img" /b
+./ds3mkdir "$img" 5 d
+./ds3touch "$img" 6 e.txt
+./ds3ls "$img" /b/c/d

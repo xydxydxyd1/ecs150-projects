@@ -231,17 +231,37 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
   if (inum >= super.num_inodes)
     return -ENOTENOUGHSPACE;
 
+  disk->beginTransaction();
+
   inode_bitmap[inum/8] = byte_buf | mask;
+  writeInodeBitmap(&super, inode_bitmap.get());
 
   inode_t new_file;
   new_file.size = 0;
   new_file.type = type;
-
   unique_ptr<inode_t[]> inode_region(
       new inode_t[UFS_BLOCK_SIZE * super.inode_region_len]);
   readInodeRegion(&super, inode_region.get());
   inode_region[inum] = new_file;
   writeInodeRegion(&super, inode_region.get());
+
+  dir_ent_t new_entry;
+  new_entry.inum = inum;
+  strcpy(new_entry.name, name.c_str());
+  vector<dir_ent_t> parent_buf;
+  parent_buf.resize(parent.size / sizeof(dir_ent_t));
+  if (read(parentInodeNumber, parent_buf.data(), parent.size)) {
+    disk->rollback();
+    return -EINVALIDINODE;
+  }
+  parent_buf.push_back(new_entry);
+  if (write(parentInodeNumber, parent_buf.data(),
+            parent_buf.size() * sizeof(dir_ent_t))) {
+    disk->rollback();
+    return -EINVALIDINODE;
+  }
+
+  disk->commit();
   return inum;
 }
 

@@ -19,8 +19,12 @@ make
 echo
 
 #img="test.img"
-#img="./tests/disk_images/a.img"
-img="./tests/disk_images/big_directory.img"
+img="./tests/disk_images/a.img"
+#img="./tests/disk_images/big_directory.img"
+
+# Do not corrupt official test file
+cp "$img" "temp.img"
+img="temp.img"
 
 #echo "ds3ls"
 #./ds3ls "$img" /
@@ -31,4 +35,9 @@ img="./tests/disk_images/big_directory.img"
 #./ds3bits tests/disk_images/a.img
 
 #echo "ds3cat"
-./ds3cat "$img" 51
+#./ds3cat "$img" 51
+
+echo "ds3mkdir"
+./ds3ls "$img" /
+./ds3mkdir "$img" 0 b
+./ds3ls "$img" /

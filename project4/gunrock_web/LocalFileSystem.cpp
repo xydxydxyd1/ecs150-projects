@@ -170,7 +170,7 @@ int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
   }
 
   unique_ptr<inode_t[]> inode_region(
-      new inode_t[super.inode_region_len / sizeof(inode_t)]);
+      new inode_t[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)]);
   readInodeRegion(&super, inode_region.get());
   memcpy(inode, &inode_region[inodeNumber], sizeof(inode_t));
   return 0;
@@ -272,7 +272,6 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
 }
 
 int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
-  disk->beginTransaction();
   super_t super;
   readSuperBlock(&super);
   inode_t inode;
@@ -283,18 +282,18 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   inode.size = size;
 
   // Allocate and free space
-  size_t old_num_blks = bytes_to_blks(inode.size);
-  size_t new_num_blks = bytes_to_blks(size);
-  if (new_num_blks > DIRECT_PTRS) {
+  const int old_nblks = bytes_to_blks(inode.size);
+  const int new_nblks = bytes_to_blks(size);
+  if (new_nblks > DIRECT_PTRS) {
     disk->rollback();
     return -ENOTENOUGHSPACE;
   }
-  if (old_num_blks < new_num_blks) {
+  if (old_nblks < new_nblks) {
     unique_ptr<unsigned char[]> data_bitmap(
         new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
     readDataBitmap(&super, data_bitmap.get());
     int blknum = 0;
-    for (int direct_i = old_num_blks; direct_i < new_num_blks; direct_i++) {
+    for (int direct_i = old_nblks; direct_i < new_nblks; direct_i++) {
       while (data_bitmap[blknum / 8] & (1 << (blknum % 8))) {
         blknum++;
         // bitmap is always larger than data region, no need for bound checks
@@ -308,11 +307,11 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
     }
     writeDataBitmap(&super, data_bitmap.get());
   }
-  else if (old_num_blks > new_num_blks) {
+  else if (old_nblks > new_nblks) {
     unique_ptr<unsigned char[]> data_bitmap(
         new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
     readDataBitmap(&super, data_bitmap.get());
-    for (int direct_i = new_num_blks; direct_i < old_num_blks; direct_i++) {
+    for (int direct_i = new_nblks; direct_i < old_nblks; direct_i++) {
       int blknum = inode.direct[direct_i];
       data_bitmap[blknum / 8] &= ~(1 << (blknum % 8));  // unset
     }
@@ -334,11 +333,10 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
 
   // Write inode
   unique_ptr<inode_t[]> inode_region(
-      new inode_t[super.inode_region_len / sizeof(inode_t)]);
+      new inode_t[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)]);
   readInodeRegion(&super, inode_region.get());
   inode_region[inodeNumber] = inode;
   writeInodeRegion(&super, inode_region.get());
-  disk->commit();
   return 0;
 }
 

@@ -12,6 +12,11 @@
 
 using namespace std;
 
+/// Convert number of bytes to number of blocks needed to store the bytes
+size_t bytes_to_blks(size_t num_bytes) {
+  return num_bytes / UFS_BLOCK_SIZE + (num_bytes % UFS_BLOCK_SIZE > 0);
+}
+
 /// Read `len` bytes from `disk` into `dest`, starting from byte address
 /// `addr`
 ///
@@ -46,7 +51,7 @@ void read_bytes(Disk *disk, int addr, int len, void* dest) {
 /// `addr`.
 ///
 /// Does not start or stop transaction. Errors are thrown at the Disk level
-void write_bytes(Disk *disk, int addr, int len, void* src) {
+void write_bytes(Disk *disk, int addr, int len, const void* src) {
   char buf[UFS_BLOCK_SIZE];
   int write_offset = 0;
   int unwritten_len = len;
@@ -164,7 +169,8 @@ int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
     return -EINVALIDINODE;
   }
 
-  unique_ptr<inode_t[]> inode_region(new inode_t[super.num_inodes]);
+  unique_ptr<inode_t[]> inode_region(
+      new inode_t[super.inode_region_len / sizeof(inode_t)]);
   readInodeRegion(&super, inode_region.get());
   memcpy(inode, &inode_region[inodeNumber], sizeof(inode_t));
   return 0;
@@ -266,6 +272,73 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
 }
 
 int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
+  disk->beginTransaction();
+  super_t super;
+  readSuperBlock(&super);
+  inode_t inode;
+  if (stat(inodeNumber, &inode)) {
+    disk->rollback();
+    return -EINVALIDINODE;
+  }
+  inode.size = size;
+
+  // Allocate and free space
+  size_t old_num_blks = bytes_to_blks(inode.size);
+  size_t new_num_blks = bytes_to_blks(size);
+  if (new_num_blks > DIRECT_PTRS) {
+    disk->rollback();
+    return -ENOTENOUGHSPACE;
+  }
+  if (old_num_blks < new_num_blks) {
+    unique_ptr<unsigned char[]> data_bitmap(
+        new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
+    readDataBitmap(&super, data_bitmap.get());
+    int blknum = 0;
+    for (int direct_i = old_num_blks; direct_i < new_num_blks; direct_i++) {
+      while (data_bitmap[blknum / 8] & (1 << (blknum % 8))) {
+        blknum++;
+        // bitmap is always larger than data region, no need for bound checks
+        if ((blknum + 1) > super.data_region_len) {
+          disk->rollback();
+          return -ENOTENOUGHSPACE;
+        }
+      }
+      inode.direct[direct_i] = blknum;
+      data_bitmap[blknum / 8] |= 1 << (blknum % 8); // set
+    }
+    writeDataBitmap(&super, data_bitmap.get());
+  }
+  else if (old_num_blks > new_num_blks) {
+    unique_ptr<unsigned char[]> data_bitmap(
+        new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
+    readDataBitmap(&super, data_bitmap.get());
+    for (int direct_i = new_num_blks; direct_i < old_num_blks; direct_i++) {
+      int blknum = inode.direct[direct_i];
+      data_bitmap[blknum / 8] &= ~(1 << (blknum % 8));  // unset
+    }
+    writeDataBitmap(&super, data_bitmap.get());
+  }
+
+  // Write data region
+  int write_offset = 0;
+  int unwritten_nbytes = size;
+  for (auto direct_ptr : inode.direct) {
+    if (unwritten_nbytes == 0)
+      break;
+    int write_nbytes = unwritten_nbytes > UFS_BLOCK_SIZE ?
+        UFS_BLOCK_SIZE : unwritten_nbytes;
+    write_bytes(disk, direct_ptr * UFS_BLOCK_SIZE, write_nbytes, (char*)buffer + write_offset);
+    unwritten_nbytes -= write_nbytes;
+    write_offset += write_nbytes;
+  }
+
+  // Write inode
+  unique_ptr<inode_t[]> inode_region(
+      new inode_t[super.inode_region_len / sizeof(inode_t)]);
+  readInodeRegion(&super, inode_region.get());
+  inode_region[inodeNumber] = inode;
+  writeInodeRegion(&super, inode_region.get());
+  disk->commit();
   return 0;
 }
 

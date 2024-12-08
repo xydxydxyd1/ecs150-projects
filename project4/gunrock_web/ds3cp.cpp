@@ -1,3 +1,5 @@
+#include <fstream>
+#include <vector>
 #include <iostream>
 #include <string>
 
@@ -22,12 +24,21 @@ int main(int argc, char *argv[]) {
   }
 
   // Parse command line arguments
-  /*
-  Disk *disk = new Disk(argv[1], UFS_BLOCK_SIZE);
-  LocalFileSystem *fileSystem = new LocalFileSystem(disk);
+  Disk disk(argv[1], UFS_BLOCK_SIZE);
+  LocalFileSystem fileSystem(&disk);
   string srcFile = string(argv[2]);
   int dstInode = stoi(argv[3]);
-  */
+
+  ifstream file(srcFile);
+  vector<char> buf;
+  while (!file.eof()) {
+    buf.push_back(file.get());
+  }
+
+  if (fileSystem.write(dstInode, buf.data(), buf.size())) {
+    cerr << "Could not write to dst_file" << endl;
+    exit(1);
+  }
   
   return 0;
 }

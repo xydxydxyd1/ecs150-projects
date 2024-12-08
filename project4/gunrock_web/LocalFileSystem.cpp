@@ -395,6 +395,16 @@ int LocalFileSystem::unlink(int parentInodeNumber, string name) {
     disk->rollback();
     return -EINVALIDINODE;
   }
+
+  super_t super;
+  readSuperBlock(&super);
+  unique_ptr<unsigned char[]> inode_bitmap(
+      new unsigned char[super.inode_bitmap_len * UFS_BLOCK_SIZE]);
+  readInodeBitmap(&super, inode_bitmap.get());
+  inode_bitmap[child_inum/8] = inode_bitmap[child_inum/8] & ~(1 << child_inum % 8);
+  writeInodeBitmap(&super, inode_bitmap.get());
+
+  // Remove directory entry
   vector<dir_ent_t> parent_buf;
   parent_buf.resize(parent.size / sizeof(dir_ent_t));
   if (read(parentInodeNumber, parent_buf.data(), parent.size)) {
@@ -410,7 +420,6 @@ int LocalFileSystem::unlink(int parentInodeNumber, string name) {
     parent_buf[i] = parent_buf[i + 1];
   }
   parent_buf.pop_back();
-
   int size = parent_buf.size() * sizeof(dir_ent_t);
   int write_amt = write_data(this, parentInodeNumber, parent_buf.data(), size);
   if (write_amt != size) {

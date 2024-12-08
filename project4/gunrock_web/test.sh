@@ -136,11 +136,13 @@ function rm_general() {
     cp -r $img_dir tmp
     img="tmp/a.img"
 
+    run_and_echo ./ds3bits $img
     run_and_echo ./ds3rm "$img" 2 c.txt
     run_and_echo ./ds3ls "$img" /a/b
     run_and_echo ./ds3rm "$img" 1 b
     run_and_echo ./ds3ls "$img" /a
     run_and_echo ./ds3rm "$img" 0 a
     run_and_echo ./ds3ls "$img" /
+    run_and_echo ./ds3bits $img
 }
 rm_general

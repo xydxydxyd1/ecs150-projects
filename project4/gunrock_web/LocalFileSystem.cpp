@@ -265,9 +265,10 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
     buf[0].inum = inum;
     strcpy(buf[1].name, "..");
     buf[1].inum = parentInodeNumber;
-    if (int err = write_data(this, inum, buf, sizeof(buf))) {
+    int write_nbytes = write_data(this, inum, buf, sizeof(buf));
+    if (write_nbytes != sizeof(buf)) {
       disk->rollback();
-      return err;
+      return -ENOTENOUGHSPACE;
     }
   }
 
@@ -282,8 +283,8 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
     return -EINVALIDINODE;
   }
   parent_buf.push_back(new_entry);
-  if (write_data(this, parentInodeNumber, parent_buf.data(),
-            parent_buf.size() * sizeof(dir_ent_t))) {
+  int size = parent_buf.size() * sizeof(dir_ent_t);
+  if (write_data(this, parentInodeNumber, parent_buf.data(), size) != size) {
     disk->rollback();
     return -EINVALIDINODE;
   }
@@ -297,57 +298,61 @@ int write_data(LocalFileSystem* fs, int inodeNumber, const void* buffer, int siz
   super_t super;
   fs->readSuperBlock(&super);
   inode_t inode;
-  if (fs->stat(inodeNumber, &inode)) {
+  if (fs->stat(inodeNumber, &inode))
     return -EINVALIDINODE;
-  }
 
-  // Allocate and free space
   const int old_nblks = bytes_to_blks(inode.size);
-  const int new_nblks = bytes_to_blks(size);
-  if (new_nblks > DIRECT_PTRS) {
-    return -ENOTENOUGHSPACE;
-  }
-  if (old_nblks < new_nblks) {
-    unique_ptr<unsigned char[]> data_bitmap(
-        new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
-    fs->readDataBitmap(&super, data_bitmap.get());
-    int data_blknum = 0;
-    for (int direct_i = old_nblks; direct_i < new_nblks; direct_i++) {
-      while (data_bitmap[data_blknum / 8] & (1 << (data_blknum % 8))) {
-        data_blknum++;
-        // bitmap is always larger than data region, no need for bound checks
-        if ((data_blknum + 1) > super.data_region_len) {
-          return -ENOTENOUGHSPACE;
-        }
-      }
-      inode.direct[direct_i] = data_blknum + super.data_region_addr;
-      data_bitmap[data_blknum / 8] |= 1 << (data_blknum % 8); // set
-    }
-    fs->writeDataBitmap(&super, data_bitmap.get());
-  }
-  else if (old_nblks > new_nblks) {
-    unique_ptr<unsigned char[]> data_bitmap(
-        new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
-    fs->readDataBitmap(&super, data_bitmap.get());
-    for (int direct_i = new_nblks; direct_i < old_nblks; direct_i++) {
-      int data_blknum = inode.direct[direct_i] - super.data_region_addr;
-      data_bitmap[data_blknum / 8] &= ~(1 << (data_blknum % 8));  // unset
-    }
-    fs->writeDataBitmap(&super, data_bitmap.get());
-  }
-
-  // Write data region
+  int new_nblks = bytes_to_blks(size);
+  int direct_i = 0;
   int write_offset = 0;
   int unwritten_nbytes = size;
-  for (auto direct_ptr : inode.direct) {
-    if (unwritten_nbytes == 0)
-      break;
+  /// writes into inode.direct[direct_i] as much as possible
+  auto write_blk = [&](){
     int write_nbytes = unwritten_nbytes > UFS_BLOCK_SIZE ?
         UFS_BLOCK_SIZE : unwritten_nbytes;
-    write_bytes(fs->disk, direct_ptr * UFS_BLOCK_SIZE, write_nbytes, (char*)buffer + write_offset);
+    write_bytes(fs->disk, inode.direct[direct_i] * UFS_BLOCK_SIZE, write_nbytes,
+                (char *)buffer + write_offset);
     unwritten_nbytes -= write_nbytes;
     write_offset += write_nbytes;
+  };
+
+  // Existing blocks to write
+  int smaller_limit = old_nblks < new_nblks ? old_nblks : new_nblks;
+  for (direct_i = 0; direct_i < smaller_limit; direct_i++) {
+    if (unwritten_nbytes == 0)
+      break;
+    write_blk();
   }
+
+  unique_ptr<unsigned char[]> data_bitmap(
+      new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
+  fs->readDataBitmap(&super, data_bitmap.get());
+
+  // New blocks to allocate and write
+  int data_blknum = 0;
+  for (direct_i = old_nblks; direct_i < new_nblks; direct_i++) {
+    while (data_bitmap[data_blknum / 8] & (1 << (data_blknum % 8))) {
+      data_blknum++;
+      // bitmap is always larger than data region, no need for bound checks
+      if (data_blknum >= super.data_region_len)
+        break;
+    }
+    if (data_blknum >= super.data_region_len) {
+      size = size - unwritten_nbytes;
+      break;
+    }
+    inode.direct[direct_i] = data_blknum + super.data_region_addr;
+    data_bitmap[data_blknum / 8] |= 1 << (data_blknum % 8); // set
+    write_blk();
+  }
+
+  // Outdated blocks to delete
+  for (direct_i = new_nblks; direct_i < old_nblks; direct_i++) {
+    int data_blknum = inode.direct[direct_i] - super.data_region_addr;
+    data_bitmap[data_blknum / 8] &= ~(1 << (data_blknum % 8));  // unset
+  }
+
+  fs->writeDataBitmap(&super, data_bitmap.get());
 
   // Write inode
   inode.size = size;
@@ -356,7 +361,7 @@ int write_data(LocalFileSystem* fs, int inodeNumber, const void* buffer, int siz
   fs->readInodeRegion(&super, inode_region.get());
   inode_region[inodeNumber] = inode;
   fs->writeInodeRegion(&super, inode_region.get());
-  return 0;
+  return size;
 }
 
 int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {

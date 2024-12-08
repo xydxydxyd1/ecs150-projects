@@ -373,4 +373,50 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   return write_data(this, inodeNumber, buffer, size);
 }
 
-int LocalFileSystem::unlink(int parentInodeNumber, string name) { return 0; }
+int LocalFileSystem::unlink(int parentInodeNumber, string name) {
+  inode_t parent;
+  if (stat(parentInodeNumber, &parent))
+    return -EINVALIDINODE;
+  if (parent.type != UFS_DIRECTORY)
+    return -EINVALIDINODE;
+  int child_inum = lookup(parentInodeNumber, name);
+  if (child_inum < 0)
+    return 0;
+  inode_t child;
+  if (stat(child_inum, &child)) return -EINVALIDINODE;
+  if (child.type == UFS_DIRECTORY && child.size != sizeof(dir_ent_t) * 2)
+    return -ENOTEMPTY;
+  if (name == "." || name == "..")
+    return -EINVALIDNAME;
+
+  disk->beginTransaction();
+
+  if (write_data(this, child_inum, NULL, 0) != 0) {
+    disk->rollback();
+    return -EINVALIDINODE;
+  }
+  vector<dir_ent_t> parent_buf;
+  parent_buf.resize(parent.size / sizeof(dir_ent_t));
+  if (read(parentInodeNumber, parent_buf.data(), parent.size)) {
+    disk->rollback();
+    return -EINVALIDINODE;
+  }
+  int child_dir_ent;
+  for (child_dir_ent = 0; child_dir_ent < parent_buf.size(); child_dir_ent++) {
+    if (parent_buf[child_dir_ent].name == name)
+      break;
+  }
+  for (int i = child_dir_ent; i < parent_buf.size() - 1; i++) {
+    parent_buf[i] = parent_buf[i + 1];
+  }
+  parent_buf.pop_back();
+
+  int size = parent_buf.size() * sizeof(dir_ent_t);
+  int write_amt = write_data(this, parentInodeNumber, parent_buf.data(), size);
+  if (write_amt != size) {
+    disk->rollback();
+    return -EINVALIDINODE;
+  }
+
+  return 0;
+}

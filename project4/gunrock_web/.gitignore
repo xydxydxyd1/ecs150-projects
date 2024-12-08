@@ -1,3 +1,6 @@
+# artifacts for test.sh
+tmp
+
 # our main executables
 gunrock_web
 mkfs

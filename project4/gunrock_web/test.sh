@@ -88,7 +88,7 @@ function cp_general() {
     run_and_echo ./ds3cp "$img" ../README.md 3
     run_and_echo ./ds3cat $img 3 | less
 }
-cp_general
+#cp_general
 
 function cp_dir() {
     echo
@@ -128,3 +128,19 @@ function cp_overflow() {
     run_and_echo ./ds3cp $img tmp/big_file.txt 1
 }
 #cp_overflow
+
+function rm_general() {
+    echo
+    echo "ds3rm"
+    rm -rf tmp
+    cp -r $img_dir tmp
+    img="tmp/a.img"
+
+    run_and_echo ./ds3rm "$img" 2 c.txt
+    run_and_echo ./ds3ls "$img" /a/b
+    run_and_echo ./ds3rm "$img" 1 b
+    run_and_echo ./ds3ls "$img" /a
+    run_and_echo ./ds3rm "$img" 0 a
+    run_and_echo ./ds3ls "$img" /
+}
+rm_general

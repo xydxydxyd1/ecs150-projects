@@ -401,12 +401,12 @@ int LocalFileSystem::unlink(int parentInodeNumber, string name) {
     disk->rollback();
     return -EINVALIDINODE;
   }
-  int child_dir_ent;
+  size_t child_dir_ent;
   for (child_dir_ent = 0; child_dir_ent < parent_buf.size(); child_dir_ent++) {
     if (parent_buf[child_dir_ent].name == name)
       break;
   }
-  for (int i = child_dir_ent; i < parent_buf.size() - 1; i++) {
+  for (size_t i = child_dir_ent; i < parent_buf.size() - 1; i++) {
     parent_buf[i] = parent_buf[i + 1];
   }
   parent_buf.pop_back();
@@ -417,6 +417,6 @@ int LocalFileSystem::unlink(int parentInodeNumber, string name) {
     disk->rollback();
     return -EINVALIDINODE;
   }
-
+  disk->commit();
   return 0;
 }

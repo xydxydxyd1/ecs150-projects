@@ -72,6 +72,7 @@ void write_bytes(Disk *disk, int addr, int len, const void* src) {
     write_amt = unwritten_len > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : unwritten_len;
     disk->readBlock(blk_num, buf);
     memcpy(buf, (char*)src + write_offset, write_amt);
+    disk->writeBlock(blk_num, buf);
     blk_num++;
     unwritten_len -= write_amt;
     write_offset += write_amt;
@@ -289,17 +290,17 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
     unique_ptr<unsigned char[]> data_bitmap(
         new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
     readDataBitmap(&super, data_bitmap.get());
-    int blknum = 0;
+    int data_blknum = 0;
     for (int direct_i = old_nblks; direct_i < new_nblks; direct_i++) {
-      while (data_bitmap[blknum / 8] & (1 << (blknum % 8))) {
-        blknum++;
+      while (data_bitmap[data_blknum / 8] & (1 << (data_blknum % 8))) {
+        data_blknum++;
         // bitmap is always larger than data region, no need for bound checks
-        if ((blknum + 1) > super.data_region_len) {
+        if ((data_blknum + 1) > super.data_region_len) {
           return -ENOTENOUGHSPACE;
         }
       }
-      inode.direct[direct_i] = blknum;
-      data_bitmap[blknum / 8] |= 1 << (blknum % 8); // set
+      inode.direct[direct_i] = data_blknum + super.data_region_addr;
+      data_bitmap[data_blknum / 8] |= 1 << (data_blknum % 8); // set
     }
     writeDataBitmap(&super, data_bitmap.get());
   }
@@ -308,8 +309,8 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
         new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
     readDataBitmap(&super, data_bitmap.get());
     for (int direct_i = new_nblks; direct_i < old_nblks; direct_i++) {
-      int blknum = inode.direct[direct_i];
-      data_bitmap[blknum / 8] &= ~(1 << (blknum % 8));  // unset
+      int data_blknum = inode.direct[direct_i] - super.data_region_addr;
+      data_bitmap[data_blknum / 8] &= ~(1 << (data_blknum % 8));  // unset
     }
     writeDataBitmap(&super, data_bitmap.get());
   }

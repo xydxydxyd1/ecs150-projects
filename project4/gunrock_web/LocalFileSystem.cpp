@@ -240,9 +240,9 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
 
   disk->beginTransaction();
 
+  // write inode
   inode_bitmap[inum/8] = byte_buf | mask;
   writeInodeBitmap(&super, inode_bitmap.get());
-
   inode_t new_file;
   new_file.size = 0;
   new_file.type = type;
@@ -252,6 +252,20 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
   inode_region[inum] = new_file;
   writeInodeRegion(&super, inode_region.get());
 
+  if (type == UFS_DIRECTORY) {
+    // write data (. and ..)
+    dir_ent_t buf[2];
+    strcpy(buf[0].name, ".");
+    buf[0].inum = inum;
+    strcpy(buf[1].name, "..");
+    buf[1].inum = parentInodeNumber;
+    if (int err = write(inum, buf, sizeof(buf))) {
+      disk->rollback();
+      return err;
+    }
+  }
+
+  // write parent data
   dir_ent_t new_entry;
   new_entry.inum = inum;
   strcpy(new_entry.name, name.c_str());

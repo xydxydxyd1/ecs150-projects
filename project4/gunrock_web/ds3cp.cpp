@@ -39,8 +39,6 @@ int main(int argc, char *argv[]) {
   while (file.good()) {
     buf.push_back(file.get());
   }
-  if (file.fail())
-    err();
   if (buf[buf.size() - 1] == EOF)
     buf.pop_back();
 

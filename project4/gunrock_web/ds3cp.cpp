@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     read_amt = read(fd, buf, 1);
   }
 
-  if (fileSystem.write(dstInode, content.data(), content.size()))
+  if (fileSystem.write(dstInode, content.data(), content.size()) < 0)
     err();
   
   return 0;

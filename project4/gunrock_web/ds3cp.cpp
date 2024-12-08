@@ -1,4 +1,3 @@
-#include <fstream>
 #include <vector>
 #include <iostream>
 #include <string>
@@ -34,15 +33,16 @@ int main(int argc, char *argv[]) {
   string srcFile = string(argv[2]);
   int dstInode = stoi(argv[3]);
 
-  ifstream file(srcFile);
-  vector<char> buf;
-  while (file.good()) {
-    buf.push_back(file.get());
+  int fd = open(srcFile.c_str(), O_RDONLY);
+  vector<char> content;
+  char buf[1];
+  int read_amt = read(fd, buf, 1);
+  while (read_amt == 1) {
+    content.push_back(*buf);
+    read_amt = read(fd, buf, 1);
   }
-  if (buf[buf.size() - 1] == EOF)
-    buf.pop_back();
 
-  if (fileSystem.write(dstInode, buf.data(), buf.size()))
+  if (fileSystem.write(dstInode, content.data(), content.size()))
     err();
   
   return 0;

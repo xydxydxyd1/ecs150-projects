@@ -12,6 +12,12 @@
 
 using namespace std;
 
+// helpers
+void read_bytes(Disk *disk, int addr, int len, void* dest);
+void write_bytes(Disk *disk, int addr, int len, const void* src);
+size_t bytes_to_blks(size_t num_bytes);
+int write_data(LocalFileSystem* fs, int inodeNumber, const void* buffer, int size);
+
 /// Convert number of bytes to number of blocks needed to store the bytes
 size_t bytes_to_blks(size_t num_bytes) {
   return num_bytes / UFS_BLOCK_SIZE + (num_bytes % UFS_BLOCK_SIZE > 0);
@@ -259,7 +265,7 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
     buf[0].inum = inum;
     strcpy(buf[1].name, "..");
     buf[1].inum = parentInodeNumber;
-    if (int err = write(inum, buf, sizeof(buf))) {
+    if (int err = write_data(this, inum, buf, sizeof(buf))) {
       disk->rollback();
       return err;
     }
@@ -276,7 +282,7 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
     return -EINVALIDINODE;
   }
   parent_buf.push_back(new_entry);
-  if (write(parentInodeNumber, parent_buf.data(),
+  if (write_data(this, parentInodeNumber, parent_buf.data(),
             parent_buf.size() * sizeof(dir_ent_t))) {
     disk->rollback();
     return -EINVALIDINODE;
@@ -286,11 +292,12 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
   return inum;
 }
 
-int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
+/// write without type checking file
+int write_data(LocalFileSystem* fs, int inodeNumber, const void* buffer, int size) {
   super_t super;
-  readSuperBlock(&super);
+  fs->readSuperBlock(&super);
   inode_t inode;
-  if (stat(inodeNumber, &inode)) {
+  if (fs->stat(inodeNumber, &inode)) {
     return -EINVALIDINODE;
   }
 
@@ -303,7 +310,7 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   if (old_nblks < new_nblks) {
     unique_ptr<unsigned char[]> data_bitmap(
         new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
-    readDataBitmap(&super, data_bitmap.get());
+    fs->readDataBitmap(&super, data_bitmap.get());
     int data_blknum = 0;
     for (int direct_i = old_nblks; direct_i < new_nblks; direct_i++) {
       while (data_bitmap[data_blknum / 8] & (1 << (data_blknum % 8))) {
@@ -316,17 +323,17 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
       inode.direct[direct_i] = data_blknum + super.data_region_addr;
       data_bitmap[data_blknum / 8] |= 1 << (data_blknum % 8); // set
     }
-    writeDataBitmap(&super, data_bitmap.get());
+    fs->writeDataBitmap(&super, data_bitmap.get());
   }
   else if (old_nblks > new_nblks) {
     unique_ptr<unsigned char[]> data_bitmap(
         new unsigned char[super.data_bitmap_len * UFS_BLOCK_SIZE]);
-    readDataBitmap(&super, data_bitmap.get());
+    fs->readDataBitmap(&super, data_bitmap.get());
     for (int direct_i = new_nblks; direct_i < old_nblks; direct_i++) {
       int data_blknum = inode.direct[direct_i] - super.data_region_addr;
       data_bitmap[data_blknum / 8] &= ~(1 << (data_blknum % 8));  // unset
     }
-    writeDataBitmap(&super, data_bitmap.get());
+    fs->writeDataBitmap(&super, data_bitmap.get());
   }
 
   // Write data region
@@ -337,7 +344,7 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
       break;
     int write_nbytes = unwritten_nbytes > UFS_BLOCK_SIZE ?
         UFS_BLOCK_SIZE : unwritten_nbytes;
-    write_bytes(disk, direct_ptr * UFS_BLOCK_SIZE, write_nbytes, (char*)buffer + write_offset);
+    write_bytes(fs->disk, direct_ptr * UFS_BLOCK_SIZE, write_nbytes, (char*)buffer + write_offset);
     unwritten_nbytes -= write_nbytes;
     write_offset += write_nbytes;
   }
@@ -346,10 +353,19 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   inode.size = size;
   unique_ptr<inode_t[]> inode_region(
       new inode_t[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)]);
-  readInodeRegion(&super, inode_region.get());
+  fs->readInodeRegion(&super, inode_region.get());
   inode_region[inodeNumber] = inode;
-  writeInodeRegion(&super, inode_region.get());
+  fs->writeInodeRegion(&super, inode_region.get());
   return 0;
+}
+
+int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
+  inode_t inode;
+  if (stat(inodeNumber, &inode))
+    return -EINVALIDINODE;
+  if (inode.type != UFS_REGULAR_FILE)
+    return -EINVALIDTYPE;
+  return write_data(this, inodeNumber, buffer, size);
 }
 
 int LocalFileSystem::unlink(int parentInodeNumber, string name) { return 0; }

@@ -15,6 +15,11 @@
 
 using namespace std;
 
+void err() {
+  cerr << "Could not write to dst_file" << endl;
+  exit(1);
+}
+
 int main(int argc, char *argv[]) {
   if (argc != 4) {
     cerr << argv[0] << ": diskImageFile src_file dst_inode" << endl;
@@ -31,14 +36,16 @@ int main(int argc, char *argv[]) {
 
   ifstream file(srcFile);
   vector<char> buf;
-  while (!file.eof()) {
+  while (file.good()) {
     buf.push_back(file.get());
   }
+  if (file.fail())
+    err();
+  if (buf[buf.size() - 1] == EOF)
+    buf.pop_back();
 
-  if (fileSystem.write(dstInode, buf.data(), buf.size())) {
-    cerr << "Could not write to dst_file" << endl;
-    exit(1);
-  }
+  if (fileSystem.write(dstInode, buf.data(), buf.size()))
+    err();
   
   return 0;
 }
